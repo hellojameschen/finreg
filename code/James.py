@@ -992,9 +992,9 @@ if REBUILD_DATSETS:
     score_cols = list(filter(lambda x: "score" in x,df.columns))
     for score_col in score_cols:
         threshold_fail = df[score_col]<0.95
-        df.loc[threshold_fail, score_col] = np.NaN
-        df.loc[threshold_fail, df.columns[df.columns.get_loc(score_col)-1]] = np.NaN
-        df.loc[threshold_fail, df.columns[df.columns.get_loc(score_col)-2]] = np.NaN
+        all_cols = list(filter(lambda x: score_col.split(':')[0] in x,df.columns))
+        df.loc[threshold_fail, all_cols] = np.NaN
+
         # for i in range(len(df)):
         #     if threshold_fail[i]:
         #         df.iloc[i,df.columns.get_loc(score_col)]= np.NaN

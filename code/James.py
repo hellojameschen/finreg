@@ -279,6 +279,37 @@ def get_quantile_by_variable(df, ascending_sort_var, ascending_quantile_start, a
     quantile_df = df.iloc[start_idx:end_idx, :]
     return quantile_df[vars_to_describe] 
 
+def get_match_candidate_tuple(row_idx, row):
+    unique_id = row[0]
+    candidate_match_name = row[1]
+    
+    # tokenize the candidate match
+    candidate_match_tokens = set(candidate_match_name.split(" "))
+
+    # Calculate the match score
+    total_inverse_frequency = 0
+    total_matching_inverse_frequency = 0
+    tokenized_name = tokens_list[name_type_idx]
+    for token in tokenized_name:
+        token_frequency = frequency_dict_list[name_type_idx][token]
+        total_inverse_frequency += 1.0/token_frequency
+        if token in candidate_match_tokens:
+            total_matching_inverse_frequency += 1.0/token_frequency
+    match_score = total_matching_inverse_frequency / total_inverse_frequency
+
+    # If the number of tokens in the names are different, penalize 0.1 per token for for tokens not being in order
+    num_unique_tokens_in_common = len(set(tokenized_name).intersection(candidate_match_tokens))
+    longest_common_substring = get_longest_common_substring(name, candidate_match_name, len(name), len(candidate_match_name))
+    tokenized_longest_common_substring = longest_common_substring.split(" ")
+    num_unique_tokens_in_longest_common_substring = len(set([elem for elem in tokenized_longest_common_substring if len(elem.strip()) > 0]))
+    match_score = match_score - (num_unique_tokens_in_common - num_unique_tokens_in_longest_common_substring)*0.1
+
+    # added by James
+    match_score -= 0.001 * len(candidate_match_name)/len(longest_common_substring) 
+
+    match_candidate_tuple = (unique_id, candidate_match_name, match_score)
+    return match_candidate_tuple
+
 
 REBUILD_DATSETS = True
 if REBUILD_DATSETS:
@@ -501,35 +532,7 @@ if REBUILD_DATSETS:
             # Iterate through the candidate matches to the most informative token
             if name_type_token in candidate_match_dict:
                 for row_idx, row in enumerate(candidate_match_dict[name_type_token]):
-                    unique_id = row[0]
-                    candidate_match_name = row[1]
-                    
-                    # tokenize the candidate match
-                    candidate_match_tokens = set(candidate_match_name.split(" "))
-
-                    # Calculate the match score
-                    total_inverse_frequency = 0
-                    total_matching_inverse_frequency = 0
-                    tokenized_name = tokens_list[name_type_idx]
-                    for token in tokenized_name:
-                        token_frequency = frequency_dict_list[name_type_idx][token]
-                        total_inverse_frequency += 1.0/token_frequency
-                        if token in candidate_match_tokens:
-                            total_matching_inverse_frequency += 1.0/token_frequency
-                    match_score = total_matching_inverse_frequency / total_inverse_frequency
-
-                    # If the number of tokens in the names are different, penalize 0.1 per token for for tokens not being in order
-                    num_unique_tokens_in_common = len(set(tokenized_name).intersection(candidate_match_tokens))
-                    longest_common_substring = get_longest_common_substring(name, candidate_match_name, len(name), len(candidate_match_name))
-                    tokenized_longest_common_substring = longest_common_substring.split(" ")
-                    num_unique_tokens_in_longest_common_substring = len(set([elem for elem in tokenized_longest_common_substring if len(elem.strip()) > 0]))
-                    match_score = match_score - (num_unique_tokens_in_common - num_unique_tokens_in_longest_common_substring)*0.1
-
-                    # added by James
-                    # match_score -= 0.001 * len(candidate_match_name)/len(longest_common_substring) 
-
-                    match_candidate_tuple = (unique_id, candidate_match_name, match_score)
-                    candidate_matches.append(match_candidate_tuple)
+                    candidate_matches.append(get_match_candidate_tuple(row_idx, row))
 
             # Sort the candidate matches, first by the match score and then by the absolute value of the difference in the number of tokens between the submitter (or org) name and the candidate match org name
             candidate_matches.sort(key=lambda x:(-x[2], abs(len(x[1].split(" ")) - len(tokens_list[name_type_idx]))))
@@ -984,9 +987,9 @@ if REBUILD_DATSETS:
     df = covariate_df
     df = df[list(filter(lambda x: not "submitter" in x,df.columns))]
     df = df[df['comment_org_name']!='']
-    df.to_csv(BASE_DIR + "test_df.csv")
+    df.to_csv(BASE_DIR + "data/match_data/match_all_covariates_df_" + curr_date + ".csv")
 
-    df = pd.read_csv(BASE_DIR + "test_df.csv")
+    df = pd.read_csv(BASE_DIR + "data/match_data/match_all_covariates_df_" + curr_date + ".csv")
     df = df.drop("Unnamed: 0", axis=1)
 
     score_cols = list(filter(lambda x: "score" in x,df.columns))
@@ -1015,7 +1018,7 @@ if REBUILD_DATSETS:
           column = 'exact_match_present',
           value = new_col)
 
-    df.to_csv(BASE_DIR + "test2_df.csv")
+    df.to_csv(BASE_DIR + "data/match_data/match_df_" + curr_date + ".csv")
 
 
        

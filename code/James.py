@@ -305,7 +305,8 @@ def get_match_candidate_tuple(row_idx, row):
     match_score = match_score - (num_unique_tokens_in_common - num_unique_tokens_in_longest_common_substring)*0.1
 
     # added by James
-    match_score -= 0.001 * len(candidate_match_name)/len(longest_common_substring) 
+    # match_score -= 0.001 * len(candidate_match_name)/len(longest_common_substring) 
+    match_score -= 0.0001 * len(name)/len(longest_common_substring) 
 
     match_candidate_tuple = (unique_id, candidate_match_name, match_score)
     return match_candidate_tuple

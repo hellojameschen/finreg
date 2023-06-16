@@ -2,7 +2,7 @@
 # coding: utf-8
 
 
-from tqdm import tqdm
+from tqdm.auto import tqdm
 import nltk
 from nltk.corpus import stopwords
 import ssl
@@ -322,62 +322,62 @@ if REBUILD_DATSETS:
 
     org_name_dict = {}
     if True:
-            financial_datasets = []
-            unique_ids = []
-            all_org_names = []
-            for financial_dataset in sources:
-                intermediate_data_folder = "data/"
-                col_name = ""
-                read_from_file = False
-                if financial_dataset == "FDIC_Institutions":
-                    intermediate_data_folder = "data/merged_resources/"
-                    col_name = "NAME"
-                    read_from_file = True
-                elif financial_dataset == "FFIECInstitutions":
-                    intermediate_data_folder = "data/merged_resources/"
-                    col_name = "Financial Institution Name"
-                    read_from_file = True
-                elif financial_dataset == "CreditUnions":
-                    col_name = "CU_NAME"
-                    read_from_file = True
-                elif financial_dataset == "CIK":
-                    intermediate_data_folder = "data/merged_resources/"
-                    col_name = "company_name"#"COMPANYNAME"
-                    read_from_file = True
-                elif financial_dataset == "compustat_resources":
-                    intermediate_data_folder = "data/merged_resources/"
-                    col_name = "conm"
-                    read_from_file = True
-                elif financial_dataset == "nonprofits_resources":
-                    intermediate_data_folder = "data/merged_resources/"
-                    col_name = "name"
-                    read_from_file = True
-                elif financial_dataset == "opensecrets_resources_jwVersion":
-                    intermediate_data_folder = "data/merged_resources/"
-                    col_name = "orgName"
-                    read_from_file = True
-                elif financial_dataset == "SEC_Institutions":
-                    intermediate_data_folder = "data/merged_resources/"
-                    col_name = "Name"
-                    read_from_file = True
+        financial_datasets = []
+        unique_ids = []
+        all_org_names = []
+        for financial_dataset in sources:
+            intermediate_data_folder = "data/"
+            col_name = ""
+            read_from_file = False
+            if financial_dataset == "FDIC_Institutions":
+                intermediate_data_folder = "data/merged_resources/"
+                col_name = "NAME"
+                read_from_file = True
+            elif financial_dataset == "FFIECInstitutions":
+                intermediate_data_folder = "data/merged_resources/"
+                col_name = "Financial Institution Name"
+                read_from_file = True
+            elif financial_dataset == "CreditUnions":
+                col_name = "CU_NAME"
+                read_from_file = True
+            elif financial_dataset == "CIK":
+                intermediate_data_folder = "data/merged_resources/"
+                col_name = "company_name"#"COMPANYNAME"
+                read_from_file = True
+            elif financial_dataset == "compustat_resources":
+                intermediate_data_folder = "data/merged_resources/"
+                col_name = "conm"
+                read_from_file = True
+            elif financial_dataset == "nonprofits_resources":
+                intermediate_data_folder = "data/merged_resources/"
+                col_name = "name"
+                read_from_file = True
+            elif financial_dataset == "opensecrets_resources_jwVersion":
+                intermediate_data_folder = "data/merged_resources/"
+                col_name = "orgName"
+                read_from_file = True
+            elif financial_dataset == "SEC_Institutions":
+                intermediate_data_folder = "data/merged_resources/"
+                col_name = "Name"
+                read_from_file = True
 
-                print(financial_dataset)
-                if financial_dataset == "opensecrets_resources_jwVersion":
-                    df = pd.read_csv(BASE_DIR + intermediate_data_folder + financial_dataset + ".csv", quotechar='"')
-                else:
-                    df = pd.read_csv(BASE_DIR + intermediate_data_folder + financial_dataset + ".csv")
-                df['unique_id'] = financial_dataset + "-" + df.index.astype(str)
-                df['financial_dataset'] = financial_dataset
-                financial_datasets = financial_datasets + list(df['unique_id'])
-                unique_ids = unique_ids + list(df['unique_id'])
-                all_org_names = all_org_names + list(df[col_name])
+            print(financial_dataset)
+            if financial_dataset == "opensecrets_resources_jwVersion":
+                df = pd.read_csv(BASE_DIR + intermediate_data_folder + financial_dataset + ".csv", quotechar='"')
+            else:
+                df = pd.read_csv(BASE_DIR + intermediate_data_folder + financial_dataset + ".csv")
+            df['unique_id'] = financial_dataset + "-" + df.index.astype(str)
+            df['financial_dataset'] = financial_dataset
+            financial_datasets = financial_datasets + list(df['unique_id'])
+            unique_ids = unique_ids + list(df['unique_id'])
+            all_org_names = all_org_names + list(df[col_name])
 
-            data = list(zip(unique_ids, all_org_names, financial_datasets))
-            org_name_df = pd.DataFrame(data, columns=['unique_id', 'org_name', 'financial_dataset'])
-            org_name_df_lst = []
-            # for source in sources:
-            #     org_name_df_lst.append(org_name_df[org_name_df['financial_dataset']==source]['org_name'].apply(clean_fin_org_names))
-            org_name_df['org_name'] = org_name_df['org_name'].apply(clean_fin_org_names)
+        data = list(zip(unique_ids, all_org_names, financial_datasets))
+        org_name_df = pd.DataFrame(data, columns=['unique_id', 'org_name', 'financial_dataset'])
+        org_name_df_lst = []
+        # for source in sources:
+        #     org_name_df_lst.append(org_name_df[org_name_df['financial_dataset']==source]['org_name'].apply(clean_fin_org_names))
+        org_name_df['org_name'] = org_name_df['org_name'].apply(clean_fin_org_names)
 
 
 

@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 
-BASE_DIR = "/Users/jameschen/Team Name Dropbox/James Chen/FINREGRULEMAKE2/finreg/"
+BASE_DIR = '/Users/jameschen/Team Name Dropbox/James Chen/FINREGRULEMAKE2/finreg/data/match_data/'
 
 
 def get_best(df):
@@ -11,11 +11,13 @@ def get_best(df):
     df['best_match_name'] = df.apply(lambda row: row.loc[row['best_match_name']] if row['best_match_name']==row['best_match_name'] else None, axis=1)
     return df[['comment_org_name', 'best_match_score', 'best_match_name']]
 
-df1 = pd.read_csv(BASE_DIR + "test2_df.csv")
-df2 = pd.read_csv(BASE_DIR + "test2_df.csv")
+df1 = get_best(pd.read_csv(BASE_DIR + "test2_df.csv")).groupby('comment_org_name').first()
+df2 = get_best(pd.read_csv(BASE_DIR + "match_df_20230615.csv")).groupby('comment_org_name').first()
 
-result = get_best(df1).merge(get_best(df2), on ='comment_org_name',suffixes=('_old', '_new'))
+result = df1.merge(df2, on ='comment_org_name', suffixes=('_old', '_new'))
 
 result = result[result['best_match_name_old'] != result['best_match_name_new']]
+
+result = result[result['best_match_name_old'] == result['best_match_name_old']]
 
 

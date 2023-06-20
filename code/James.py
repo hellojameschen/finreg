@@ -305,8 +305,7 @@ def get_match_candidate_tuple(row_idx, row):
     match_score = match_score - (num_unique_tokens_in_common - num_unique_tokens_in_longest_common_substring)*0.1
 
     # added by James
-    # match_score -= 0.001 * len(candidate_match_name)/len(longest_common_substring) 
-    match_score -= 0.0001 * len(name)/len(longest_common_substring) 
+    match_score -= 0.001 * len(candidate_match_name)/len(longest_common_substring) 
 
     match_candidate_tuple = (unique_id, candidate_match_name, match_score)
     return match_candidate_tuple
@@ -485,8 +484,6 @@ if REBUILD_DATSETS:
             else:
                 candidate_match_dict[token] = [(unique_id, org_name)]
                 
-        # if row_idx % 50000 == 0:
-        #     print(row_idx)
 
     # Apply linking dataset
     # 1.5.1: For each org and submitter name in the scraped comment dataset, get all of the names ('candidate matches') from among the gathered org datasets that have the most important word of the scraped db names in the org's name. Calculate a tf-idf weighted jaccard index match score to choose the best matches among the candidates.
@@ -694,7 +691,6 @@ if REBUILD_DATSETS:
             
         num_likely_orgs += likely_org
         
-        # TODO: make this more broad
         good_matches_org_tagged[elem] = (good_matches[elem], (likely_org, [X.label_ for X in tagged_submitter_name.ents], [X.label_ for X in tagged_org_name.ents]))
         
         # if elem_idx % 10000 == 0:

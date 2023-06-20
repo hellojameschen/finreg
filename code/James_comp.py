@@ -2,8 +2,8 @@ import pandas as pd
 import numpy as np
 
 BASE_DIR = '/Users/jameschen/Team Name Dropbox/James Chen/FINREGRULEMAKE2/finreg/data/match_data/'
-old_file = "test2_df.csv"
-new_file = "match_df_20230615.csv"
+old_file = "match_df_20230615.csv"
+new_file = "match_df_20230619.csv"
 
 
 def get_best(df):

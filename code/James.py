@@ -279,7 +279,7 @@ def get_quantile_by_variable(df, ascending_sort_var, ascending_quantile_start, a
     quantile_df = df.iloc[start_idx:end_idx, :]
     return quantile_df[vars_to_describe] 
 
-def get_match_candidate_tuple(row_idx, row):
+def get_match_candidate_tuple(row_idx, row, org_tokens, org_frequency_dict):
     unique_id = row[0]
     candidate_match_name = row[1]
     
@@ -289,9 +289,9 @@ def get_match_candidate_tuple(row_idx, row):
     # Calculate the match score
     total_inverse_frequency = 0
     total_matching_inverse_frequency = 0
-    tokenized_name = tokens_list[name_type_idx]
+    tokenized_name = org_tokens
     for token in tokenized_name:
-        token_frequency = frequency_dict_list[name_type_idx][token]
+        token_frequency = org_frequency_dict[token]
         total_inverse_frequency += 1.0/token_frequency
         if token in candidate_match_tokens:
             total_matching_inverse_frequency += 1.0/token_frequency
@@ -299,7 +299,7 @@ def get_match_candidate_tuple(row_idx, row):
 
     # If the number of tokens in the names are different, penalize 0.1 per token for for tokens not being in order
     num_unique_tokens_in_common = len(set(tokenized_name).intersection(candidate_match_tokens))
-    longest_common_substring = get_longest_common_substring(name, candidate_match_name, len(name), len(candidate_match_name))
+    longest_common_substring = get_longest_common_substring(org_name, candidate_match_name, len(org_name), len(candidate_match_name))
     tokenized_longest_common_substring = longest_common_substring.split(" ")
     num_unique_tokens_in_longest_common_substring = len(set([elem for elem in tokenized_longest_common_substring if len(elem.strip()) > 0]))
     match_score = match_score - (num_unique_tokens_in_common - num_unique_tokens_in_longest_common_substring)*0.1
@@ -452,18 +452,18 @@ if REBUILD_DATSETS:
 
 
     # 1.3: Create 2 dicts with frequency counts of every token in the org and submitter name fields of the scraped comments db
-    submitter_frequency_dict = {}
+    # submitter_frequency_dict = {}
     org_frequency_dict = {}
     for key_name in key_names_list:
         url = key_name[0]
         submitter_name = key_name[1]
         org_name = key_name[2]
 
-        for token in submitter_name.split(" "):
-            if token in submitter_frequency_dict:
-                submitter_frequency_dict[token] += 1
-            else:
-                submitter_frequency_dict[token] = 1
+        # for token in submitter_name.split(" "):
+        #     if token in submitter_frequency_dict:
+        #         submitter_frequency_dict[token] += 1
+        #     else:
+        #         submitter_frequency_dict[token] = 1
 
         for token in org_name.split(" "):
             if token in org_frequency_dict:
@@ -489,57 +489,61 @@ if REBUILD_DATSETS:
     # 1.5.1: For each org and submitter name in the scraped comment dataset, get all of the names ('candidate matches') from among the gathered org datasets that have the most important word of the scraped db names in the org's name. Calculate a tf-idf weighted jaccard index match score to choose the best matches among the candidates.
     # TODO: make match_dict more inclusive
     match_dict = {}
+    processed_names = {}
     print("Num scraped records: " + str(len(key_names_list)))
     for key_name_idx, key_name in tqdm(list(enumerate(key_names_list))): # remove bound
         url = key_name[0]
-        submitter_name = key_name[1]
+        # submitter_name = key_name[1]
         org_name = key_name[2]
-        name_list = [submitter_name, org_name]
+        # name_list = [submitter_name, org_name]
         
-        if submitter_name.strip() == "" and org_name.strip() == "":
+        if org_name.strip() == "":
             match_dict[key_name] = None
             continue
 
+        if org_name in processed_names:
+            match_dict[key_name] = processed_names[org_name]
+            continue
+
         # Tokenize the submitter name and org name
-        submitter_tokens = submitter_name.split(" ")
+        # submitter_tokens = submitter_name.split(" ")
         org_tokens = org_name.split(" ")
-        tokens_list = [submitter_tokens, org_tokens]
+        # tokens_list = [submitter_tokens, org_tokens]
         
         # Get the frequencies (in the scraped comment db) of the tokens in the submitter name and org name
-        submitter_token_frequencies = sorted([(submitter_token, submitter_frequency_dict[submitter_token]) for submitter_token in submitter_tokens], key=lambda x: x[1])
+        # submitter_token_frequencies = sorted([(submitter_token, submitter_frequency_dict[submitter_token]) for submitter_token in submitter_tokens], key=lambda x: x[1])
         org_token_frequencies = sorted([(org_token, org_frequency_dict[org_token]) for org_token in org_tokens], key=lambda x: x[1])
         
         # Extract the most unique/least frequent/most informative token from the submitter name and org name 
-        most_unique_submitter_token = submitter_token_frequencies[0][0]
+        # most_unique_submitter_token = submitter_token_frequencies[0][0]
         most_unique_org_token = org_token_frequencies[0][0]
 
         # Separately for the most informative token in the submitter and in the org name, get all org names from the gathered org datasets that contain that most informative token.
         # For each of those 'candidate' matches to the submitter and org name, calculate a match score by taking a ratio. In the numerator, find the tokens that are in both the submitter
         # (or org) name from the scraped comment AND IN the org name from the gathered org datasets. Sum the inverse frequencies of these tokens (where the frequency count is from among the
         # scraped comments). For the denominator, sum the inverse frequencies of the tokens in the submitter (or org) name.
-        frequency_dict_list = [submitter_frequency_dict, org_frequency_dict]
+        # frequency_dict_list = [submitter_frequency_dict, org_frequency_dict]
         candidate_matches_list = []
-        for name_type_idx, name_type_token in enumerate([most_unique_submitter_token, most_unique_org_token]):
 
-            name = name_list[name_type_idx]
-            if name.strip() == "":
-                candidate_matches_list.append([])
-                continue
-            
-            candidate_matches = []
-            # Iterate through the candidate matches to the most informative token
-            if name_type_token in candidate_match_dict:
-                for row_idx, row in enumerate(candidate_match_dict[name_type_token]):
-                    candidate_matches.append(get_match_candidate_tuple(row_idx, row))
+        candidate_matches = []
+        # Iterate through the candidate matches to the most informative token
+        for most_unique_org_token, _ in org_token_frequencies[:]: # uses top x most unique tokens
+            if most_unique_org_token in candidate_match_dict:
+                for row_idx, row in enumerate(candidate_match_dict[most_unique_org_token]):
+                    candidate_matches.append(get_match_candidate_tuple(row_idx, row, org_tokens, org_frequency_dict))
 
-            # Sort the candidate matches, first by the match score and then by the absolute value of the difference in the number of tokens between the submitter (or org) name and the candidate match org name
-            candidate_matches.sort(key=lambda x:(-x[2], abs(len(x[1].split(" ")) - len(tokens_list[name_type_idx]))))
-            candidate_matches_list.append(candidate_matches)
+        # Sort the candidate matches, first by the match score and then by the absolute value of the difference in the number of tokens between the submitter (or org) name and the candidate match org name
+        candidate_matches.sort(key=lambda x:(-x[2], abs(len(x[1].split(" ")) - len(org_tokens))))
+        #TODO: remove submitters
+        candidate_matches_list.append([])
+        candidate_matches_list.append(candidate_matches)
+
 
         # Record the candidate matches corresponding to the current scraped comment record
+        processed_names[org_name] = candidate_matches_list
         match_dict[key_name] = candidate_matches_list
-        # if key_name_idx % 500 == 0:
-        #     print(key_name_idx)
+
+
 
 
     # 1.5.2: Save the candidate matches and get record counts

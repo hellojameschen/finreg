@@ -621,22 +621,6 @@ if REBUILD_DATSETS:
     print("Num records without a match: " + str(counter))
     print("Share of records that weren't matchable: " + str(counter / len(match_dict)))
 
-    # 1.7: Calculate the number and share of high quality matches (match score = the maximum of 1.0) from among the matchable records
-    good_counter = 0
-    for elem_idx, elem in enumerate(good_matches):
-        good = 0
-        if len(good_matches[elem]) > 0 and good_matches[elem][0][2] == 1.0: 
-            good = 1
-            
-        if good == 1:
-            good_counter += 1
-        
-    print("Number of records: " + str(len(match_dict)))
-    print("Number of matchable records (records with >= 1 candidate match): " + str(len(good_matches)))
-    print("Number of maximum match score records: " + str(good_counter))
-    print("Share of all records with a maximum match score: " + str(good_counter / len(match_dict)))
-    print("Share of matchable records with a maximum match score: " + str(good_counter / len(good_matches)))
-
 
     ## PART 2: Attempt to estimate whether comment was submitted by a person or an organization
     nlp = en_core_web_lg.load()

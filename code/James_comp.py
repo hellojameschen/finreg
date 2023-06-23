@@ -3,7 +3,7 @@ import numpy as np
 
 BASE_DIR = '/Users/jameschen/Team Name Dropbox/James Chen/FINREGRULEMAKE2/finreg/data/match_data/'
 old_file = "match_df_20230615.csv"
-new_file = "match_df_20230619.csv"
+new_file = "match_df_20230621.csv"
 
 
 def get_best(df):

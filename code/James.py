@@ -461,7 +461,7 @@ if REBUILD_DATSETS:
     org_frequency_dict = {}
     for key_name in key_names_list:
         url = key_name[0]
-        submitter_name = key_name[1]
+        # submitter_name = key_name[1]
         org_name = key_name[2]
 
         # for token in submitter_name.split(" "):
@@ -528,7 +528,7 @@ if REBUILD_DATSETS:
         # (or org) name from the scraped comment AND IN the org name from the gathered org datasets. Sum the inverse frequencies of these tokens (where the frequency count is from among the
         # scraped comments). For the denominator, sum the inverse frequencies of the tokens in the submitter (or org) name.
         # frequency_dict_list = [submitter_frequency_dict, org_frequency_dict]
-        candidate_matches_list = []
+        # candidate_matches_list = []
 
         candidate_matches = []
         # Iterate through the candidate matches to the most informative token
@@ -540,13 +540,13 @@ if REBUILD_DATSETS:
         # Sort the candidate matches, first by the match score and then by the absolute value of the difference in the number of tokens between the submitter (or org) name and the candidate match org name
         candidate_matches.sort(key=lambda x:(-x[2], abs(len(x[1].split(" ")) - len(org_tokens))))
         #TODO: remove submitters
-        candidate_matches_list.append([])
-        candidate_matches_list.append(candidate_matches)
+        # candidate_matches_list.append([])
+        # candidate_matches_list.append(candidate_matches)
 
 
         # Record the candidate matches corresponding to the current scraped comment record
-        processed_names[org_name] = candidate_matches_list
-        match_dict[key_name] = candidate_matches_list
+        processed_names[org_name] = candidate_matches
+        match_dict[key_name] = candidate_matches
 
 
 
@@ -593,47 +593,29 @@ if REBUILD_DATSETS:
     match_counter = 0
     good_matches = {}
     for elem_idx, elem in tqdm(enumerate(match_dict)):
-        if match_dict[elem] is None or (len(match_dict[elem][0]) == 0 and len(match_dict[elem][1]) == 0):
+        if match_dict[elem] is None or len(match_dict[elem]) == 0:
             counter += 1
             continue
-            
-        # Submitter name
-        good_submitter_matches = []
-        collected_sources = set()
-        for matches in match_dict[elem]:
-            if len(collected_sources) == len(sources):
-                break
-            if len(matches) > 0:
-                match_score = matches[0][2]
-                # print(match_score)
-                for match_candidate_idx, match_candidate in enumerate(matches):
-                    if len(collected_sources) == len(sources):
-                        break
-                    if sum([token in match_candidate[1] for token in elem[1].split(" ")]) > 1:
-                        match_candidate_source = match_candidate[0].split('-')[0]
-                        if not match_candidate_source in collected_sources:
-                            good_submitter_matches.append(match_candidate)
-                            collected_sources.add(match_candidate_source)
                             
 
         # Org name
         good_org_matches = []
         collected_sources = set()
-        for matches in match_dict[elem]:
-            if len(collected_sources) == len(sources):
-                break
-            if len(matches) > 0:
-                match_score = matches[0][2]
-                for match_candidate_idx, match_candidate in enumerate(matches):
-                    if len(collected_sources) == len(sources):
-                        break
-                    if sum([token in match_candidate[1] for token in elem[2].split(" ")]) > 1:
-                        match_candidate_source = match_candidate[0].split('-')[0]
-                        if not match_candidate_source in collected_sources:
-                            good_org_matches.append(match_candidate)
-                            collected_sources.add(match_candidate_source)
+        matches = match_dict[elem]
+        if len(collected_sources) == len(sources):
+            break
+        if len(matches) > 0:
+            match_score = matches[0][2]
+            for match_candidate_idx, match_candidate in enumerate(matches):
+                if len(collected_sources) == len(sources):
+                    break
+                if sum([token in match_candidate[1] for token in elem[2].split(" ")]) > 1:
+                    match_candidate_source = match_candidate[0].split('-')[0]
+                    if not match_candidate_source in collected_sources:
+                        good_org_matches.append(match_candidate)
+                        collected_sources.add(match_candidate_source)
 
-        good_matches[elem] = (good_submitter_matches, good_org_matches)
+        good_matches[elem] = good_org_matches
             
     print("Num records in match_dict: " + str(len(match_dict)))
     print("Num records without a match: " + str(counter))
@@ -643,9 +625,7 @@ if REBUILD_DATSETS:
     good_counter = 0
     for elem_idx, elem in enumerate(good_matches):
         good = 0
-        if len(good_matches[elem][0]) > 0 and good_matches[elem][0][0][2] == 1.0: 
-            good = 1
-        if len(good_matches[elem][1]) > 0 and good_matches[elem][1][0][2] == 1.0: 
+        if len(good_matches[elem]) > 0 and good_matches[elem][0][2] == 1.0: 
             good = 1
             
         if good == 1:
@@ -667,32 +647,24 @@ if REBUILD_DATSETS:
     num_likely_orgs = 0
     for elem_idx, elem in tqdm(enumerate(good_matches)):
         
-        # Consider a submitter name to likely be a person if the submitter's name isn't empty and if at least one of its tokens gets tagged as corresponding to a person
-        tagged_submitter_name = []
-        likely_org_check1 = 1
-        if elem[1] is not None:
-            tagged_submitter_name = nlp(elem[1])
-            if "PERSON" in [tag.label_ for tag in tagged_submitter_name.ents]:
-                likely_org_check1 = 0
-        
         # Consider an org name to likely be a person if the submitter's name isn't empty and if at least one of its tokens gets tagged as corresponding to a person
         tagged_org_name = []
-        likely_org_check2 = 1
+        likely_org_check = 1
         if elem[2] is not None:
             tagged_org_name = nlp(elem[2])
             if "PERSON" in [tag.label_ for tag in tagged_org_name.ents]:
-                likely_org_check2 = 0
+                likely_org_check = 0
 
         # Default to considering a record to have been submitted by an org
         likely_org = 1
         # BUT, consider the record to have been submitted by a person if the name fields aren't empty and at least one token of each name field was tagged as a person
-        if elem[1] is not None and elem[2] is not None and elem[1] != "" and elem[2] != "" and likely_org_check1 == 0 and likely_org_check2 == 0:
+        if elem[1] is not None and elem[2] is not None and elem[1] != "" and elem[2] != "" and likely_org_check == 0:
             likely_org = 0
         # Also consider the record to have been submitted by a person if only one of the name fields was empty and the other had at least one token of each name field was tagged as a person
-        if (elem[1] is None or elem[1] == "") and (elem[2] is not None and elem[2] != "") and likely_org_check2 == 0:
+        if (elem[1] is None or elem[1] == "") and (elem[2] is not None and elem[2] != "") and likely_org_check == 0:
             likely_org = 0
         # (Same as above case but switching which name was empty)
-        if (elem[2] is None or elem[2] == "") and (elem[1] is not None and elem[1] != "") and likely_org_check1 == 0:
+        if (elem[2] is None or elem[2] == "") and (elem[1] is not None and elem[1] != ""):
             likely_org = 0        
         # Also consider the record to have been submitted by a person if the submitter name field has "anonymous anonymous" in it and the org name field is empty
         if "anonymous anonymous" in elem[1] and (elem[2] is None or elem[2] == ""):
@@ -700,7 +672,7 @@ if REBUILD_DATSETS:
             
         num_likely_orgs += likely_org
         
-        good_matches_org_tagged[elem] = (good_matches[elem], (likely_org, [X.label_ for X in tagged_submitter_name.ents], [X.label_ for X in tagged_org_name.ents]))
+        good_matches_org_tagged[elem] = (good_matches[elem], (likely_org, [X.label_ for X in tagged_org_name.ents]))
         
         # if elem_idx % 10000 == 0:
         #     print(elem_idx)
@@ -710,67 +682,6 @@ if REBUILD_DATSETS:
     print("Share of matchable records that were likely submitted by an organization: " + str(num_likely_orgs / len(good_matches)))
 
 
-    # 2.2: Estimate the share of matchable records submitted by an organization for which we found a high quality match
-    num_records = 0
-    num_likely_org = 0
-    num_pretty_good_matches = 0
-    num_good_matches = 0
-    num_likely_org_and_pretty_good_matches = 0
-    num_likely_org_and_good_matches = 0
-    org_scores = []
-    max_scores = []
-    for elem_idx, elem in enumerate(good_matches_org_tagged):
-        elem_match_data = good_matches_org_tagged[elem]
-
-        is_likely_org = elem_match_data[1][0]
-        match_score_is_1 = 0
-        
-        max_score = None
-        submitter_score = None
-        if len(elem_match_data[0][0]) > 0:
-            submitter_score = elem_match_data[0][0][0][2]
-            max_score = submitter_score
-            
-        org_score = None
-        if len(elem_match_data[0][1]) > 0:
-            org_score = elem_match_data[0][1][0][2]
-            if submitter_score is not None:
-                max_score = max(submitter_score, org_score)
-            else:
-                max_score = org_score
-            org_scores.append(org_score)
-        
-        if max_score is not None:
-            max_scores.append(max_score)
-        
-        if (len(elem_match_data[0][0]) > 0 and elem_match_data[0][0][0][2] == 1.0) or (len(elem_match_data[0][1]) > 0 and elem_match_data[0][1][0][2] == 1.0):
-            match_score_is_1 = 1
-
-        match_score_is_gt_975 = 0
-        if (len(elem_match_data[0][0]) > 0 and elem_match_data[0][0][0][2] >= 0.975) or (len(elem_match_data[0][1]) > 0 and elem_match_data[0][1][0][2] >= 0.975):
-            match_score_is_gt_975 = 1
-        num_pretty_good_matches += match_score_is_gt_975
-            
-        if match_score_is_1 == 1.0 and is_likely_org == 1:
-            num_likely_org_and_good_matches += 1
-        if is_likely_org == 1:
-            num_likely_org += 1
-        if match_score_is_1 == 1.0:
-            num_good_matches += 1
-            
-        if match_score_is_gt_975 == 1 and is_likely_org == 1:
-            num_likely_org_and_pretty_good_matches += 1
-            
-        num_records += 1
-        
-    print("Num matchable records: " + str(num_records))
-    print("Num matchable records likely submitted by an organization: " + str(num_likely_org))
-    print("Num matchable records with a high quality match: " + str(num_good_matches))
-    print("Num matchable records likely submitted by an organization that have a high quality match: " + str(num_likely_org_and_good_matches))
-    print("Share of matchable records likely submitted by an organization that have a high quality match: " + str(num_likely_org_and_good_matches / num_likely_org))
-
-    print("Num matchable records with a pretty high quality match: " + str(num_pretty_good_matches))
-    print("Num matchable records likely submitted by an organization that have a pretty high quality match: " + str(num_likely_org_and_pretty_good_matches))
 
 
     # # 2.3a: Make a histogram of the highest match score found for each matchable record
@@ -838,35 +749,8 @@ if REBUILD_DATSETS:
         matches = good_matches_org_tagged[elem][0]
         tag_data = good_matches_org_tagged[elem][1]
         is_likely_org = tag_data[0]
-        submitter_tags = tag_data[1]
-        org_tags = tag_data[2]
-        submitter_match_covariate_dict = {}
-        submitter_match_type = ""
-        submitter_best_match_score = np.nan
-        
-        submitter_matches_collected = []
-        submitter_types_collected = []
-        if len(matches[0]) > 0:
-            for match in matches[0]:
-                submitter_best_match = match
-                submitter_best_match_id = submitter_best_match[0]
-                submitter_match_type = submitter_best_match_id.split("-")[0]
-                if not submitter_match_type in submitter_types_collected:
-                    submitter_matches_collected.append(match)
-                    submitter_types_collected.append(submitter_match_type)
+        org_tags = tag_data
 
-            for submitter_match in submitter_matches_collected:
-                submitter_best_match = submitter_match
-                submitter_best_match_id = submitter_best_match[0]
-                submitter_best_match_name = submitter_best_match[1]
-                submitter_best_match_score = clean_match_score(submitter_best_match[2])
-                if pd.isnull(submitter_best_match_score):
-                    print("this shouldn't be null")
-                submitter_match_type = submitter_best_match_id.split("-")[0]
-                submitter_match_row_num = submitter_best_match_id.split("-")[1]
-                submitter_match_covariate_dict.update(get_data_row(submitter_match_type, int(submitter_match_row_num), "submitterMatch"))
-                submitter_match_covariate_dict[submitter_match_type + '-submitterMatch' + ":best_match_name"] = submitter_best_match_name
-                submitter_match_covariate_dict[submitter_match_type + '-submitterMatch' + ":best_match_score"] = submitter_best_match_score
         
         org_match_covariate_dict = {}
         org_match_type = ""
@@ -874,8 +758,8 @@ if REBUILD_DATSETS:
 
         org_matches_collected = []
         org_types_collected = []
-        if len(matches[1]) > 0:
-            for match in matches[1]:
+        if len(matches) > 0:
+            for match in matches:
                 org_best_match = match
                 org_best_match_id = org_best_match[0]
                 org_match_type = org_best_match_id.split("-")[0]
@@ -897,7 +781,7 @@ if REBUILD_DATSETS:
                 org_match_covariate_dict[org_match_type + '-orgMatch' + ":best_match_score"] = org_best_match_score
 
         
-        covariate_dict[elem] = {**submitter_match_covariate_dict, **org_match_covariate_dict}
+        covariate_dict[elem] = {**org_match_covariate_dict}
         covariate_dict[elem]['original_org_name'] = original_org_name
         covariate_dict[elem]['comment_url'] = url
         covariate_dict[elem]['comment_submitter_name'] = submitter_name
@@ -905,14 +789,10 @@ if REBUILD_DATSETS:
         covariate_dict[elem]['comment_agency'] = agency_acronym
         covariate_dict[elem]['docket_id'] = docket_id
         covariate_dict[elem]['is_likely_org'] = is_likely_org
-        covariate_dict[elem]['submitter_tags'] = str(submitter_tags)
         covariate_dict[elem]['org_tags'] = str(org_tags)
-        covariate_dict[elem]['submitter_match_type'] = submitter_match_type
         covariate_dict[elem]['org_match_type'] = org_match_type
-        covariate_dict[elem]['submitter_best_match_score'] = submitter_best_match_score
         covariate_dict[elem]['org_best_match_score'] = org_best_match_score  
 
-        covariate_dict[elem]['num_submitter_matches'] = len(submitter_matches_collected)  
         covariate_dict[elem]['num_org_matches'] = len(org_matches_collected)
 
 
@@ -945,7 +825,6 @@ if REBUILD_DATSETS:
     print("Finished creating items for df")
 
     covariate_df = pd.DataFrame(data, columns=variables)
-    covariate_df['submitter_org_match_type_combined'] = covariate_df['submitter_match_type'] + "|" + covariate_df['org_match_type']
 
     # 3.3: Save the dataframe of scraped records with attached covariates
 

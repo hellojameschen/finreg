@@ -307,10 +307,7 @@ def get_match_candidate_tuple(row, org_name):
 
     # added by James
     match_score -= 0.001 * len(candidate_match_name)/len(longest_common_substring) 
-    # # newest Changes:
-    # match_score *= 0.10
-    # match_score += 0.95 * max(len(longest_common_substring)/len(candidate_match_name),len(longest_common_substring)/len(org_name))
-    #
+
     match_candidate_tuple = (unique_id, candidate_match_name, match_score)
     return match_candidate_tuple
 
@@ -419,7 +416,7 @@ if REBUILD_DATSETS:
     #replace none
     df.loc[df['submitter_name'].isna(), "submitter_name"] = ''
 
-    key_names_list = list(df.itertuples(index=False, name=None))
+    key_names_list = df.iloc[100000:100100,:] # include how many to match
     # key_names_list = [(elem[0], clean_fin_org_names(elem[1]), clean_fin_org_names(elem[2]), elem[3], elem[4], elem[5]) for elem in key_names_list]
     
 
@@ -459,16 +456,10 @@ if REBUILD_DATSETS:
     # 1.3: Create 2 dicts with frequency counts of every token in the org and submitter name fields of the scraped comments db
     # submitter_frequency_dict = {}
     org_frequency_dict = {}
-    for key_name in key_names_list:
+    for _, key_name in key_names_list.iterrows():
         url = key_name[0]
-        # submitter_name = key_name[1]
         org_name = key_name[2]
 
-        # for token in submitter_name.split(" "):
-        #     if token in submitter_frequency_dict:
-        #         submitter_frequency_dict[token] += 1
-        #     else:
-        #         submitter_frequency_dict[token] = 1
 
         for token in org_name.split(" "):
             if token in org_frequency_dict:
@@ -494,41 +485,26 @@ if REBUILD_DATSETS:
     # 1.5.1: For each org and submitter name in the scraped comment dataset, get all of the names ('candidate matches') from among the gathered org datasets that have the most important word of the scraped db names in the org's name. Calculate a tf-idf weighted jaccard index match score to choose the best matches among the candidates.
     # TODO: make match_dict more inclusive
     match_dict = {}
-    processed_names = {}
     print("Num scraped records: " + str(len(key_names_list)))
-    for key_name_idx, key_name in tqdm(list(enumerate(key_names_list))[100000:100100]): # remove bound
+    for key_name_idx, key_name in tqdm(list(key_names_list.iterrows())):
         url = key_name[0]
         # submitter_name = key_name[1]
         org_name = key_name[2]
-        # name_list = [submitter_name, org_name]
         
         if org_name.strip() == "":
-            match_dict[key_name] = []
+            match_dict[org_name] = []
             continue
 
-        if org_name in processed_names:
-            match_dict[key_name] = processed_names[org_name]
+        if org_name in match_dict:
             continue
 
         # Tokenize the submitter name and org name
-        # submitter_tokens = submitter_name.split(" ")
         org_tokens = org_name.split(" ")
-        # tokens_list = [submitter_tokens, org_tokens]
         
         # Get the frequencies (in the scraped comment db) of the tokens in the submitter name and org name
         # submitter_token_frequencies = sorted([(submitter_token, submitter_frequency_dict[submitter_token]) for submitter_token in submitter_tokens], key=lambda x: x[1])
         org_token_frequencies = sorted([(org_token, org_frequency_dict[org_token]) for org_token in org_tokens], key=lambda x: x[1])
         
-        # Extract the most unique/least frequent/most informative token from the submitter name and org name 
-        # most_unique_submitter_token = submitter_token_frequencies[0][0]
-        # most_unique_org_token = org_token_frequencies[0][0]
-
-        # Separately for the most informative token in the submitter and in the org name, get all org names from the gathered org datasets that contain that most informative token.
-        # For each of those 'candidate' matches to the submitter and org name, calculate a match score by taking a ratio. In the numerator, find the tokens that are in both the submitter
-        # (or org) name from the scraped comment AND IN the org name from the gathered org datasets. Sum the inverse frequencies of these tokens (where the frequency count is from among the
-        # scraped comments). For the denominator, sum the inverse frequencies of the tokens in the submitter (or org) name.
-        # frequency_dict_list = [submitter_frequency_dict, org_frequency_dict]
-        # candidate_matches_list = []
 
         candidate_matches = []
         # Iterate through the candidate matches to the most informative token
@@ -545,45 +521,16 @@ if REBUILD_DATSETS:
 
 
         # Record the candidate matches corresponding to the current scraped comment record
-        processed_names[org_name] = candidate_matches
-        match_dict[key_name] = candidate_matches
+        match_dict[org_name] = candidate_matches
 
 
 
 
     # 1.5.2: Save the candidate matches and get record counts
-    with open(BASE_DIR + "data/finreg_jaccard_match_" + curr_date + ".pkl", 'wb') as pkl_out:
-        pickle.dump(match_dict, pkl_out)
+    # with open(BASE_DIR + "data/finreg_jaccard_match_" + curr_date + ".pkl", 'wb') as pkl_out:
+    #     pickle.dump(match_dict, pkl_out)
 
     print("Num scraped records: " + str(len(key_names_list)))
-
-    unique_names1 = []
-    unique_names2 = []
-    only_submitter_name = 0
-    only_org_name = 0
-    both_submitter_and_org_name = 0
-    neither = 0
-    for elem in key_names_list:
-        submitter_name = elem[1]
-        org_name = elem[2]
-        unique_names1.append(submitter_name)
-        unique_names2.append(org_name)
-        if submitter_name is not None and submitter_name is not np.nan and submitter_name.strip() != "" and org_name is not None and org_name is not np.nan and org_name.strip() != "":
-            both_submitter_and_org_name += 1
-        elif submitter_name is not None and submitter_name is not np.nan and submitter_name.strip() != "" and (org_name is None or org_name is np.nan or org_name.strip() == ""):
-            only_submitter_name += 1
-        elif (submitter_name is None or submitter_name is np.nan or submitter_name.strip() == "") and org_name is not None and org_name is not np.nan and org_name.strip() != "":
-            only_org_name += 1
-        else:
-            neither += 1
-            
-    print("Num w only submitter_name: " + str(only_submitter_name))
-    print("Num w only org_name: " + str(only_org_name))
-    print("Num w both: " + str(both_submitter_and_org_name))
-    print("Num w neither: " + str(neither))
-        
-    print("Unique submitter names: " + str(len(set(unique_names1))))
-    print("Unique organization names: " + str(len(set(unique_names2))))
 
 
     # 1.6: Extract the scraped records with at least one candidate match and take the top top_matches_num (or all if there are < top_matches_num) matches from the scored candidate matches
@@ -633,8 +580,8 @@ if REBUILD_DATSETS:
     # 2.1: Among the matchable scraped comment records, use spacy's ner tagger to tag the tokens in the submitter name and org name of each record. 
     good_matches_org_tagged = {}
     num_likely_orgs = 0
-    for elem_idx, elem in tqdm(list(enumerate(good_matches))):
-        
+    for elem_idx, elem in tqdm(list(key_names_list.iterrows())):
+        elem = tuple(elem.values)
         # Consider an org name to likely be a person if the submitter's name isn't empty and if at least one of its tokens gets tagged as corresponding to a person
         tagged_org_name = []
         likely_org_check = 1
@@ -660,7 +607,7 @@ if REBUILD_DATSETS:
             
         num_likely_orgs += likely_org
         
-        good_matches_org_tagged[elem] = (good_matches[elem], (likely_org, [X.label_ for X in tagged_org_name.ents]))
+        good_matches_org_tagged[elem] = (good_matches[elem[2]], (likely_org, [X.label_ for X in tagged_org_name.ents]))
         
         
     print("Number of records likely submitted by an organization: " + str(num_likely_orgs))
@@ -669,13 +616,6 @@ if REBUILD_DATSETS:
 
 
 
-
-    # # 2.3a: Make a histogram of the highest match score found for each matchable record
-    # plt.hist(org_scores, bins=100)
-    # plt.title("Histogram of Best Match Scores among Matchable Records")
-    # plt.xlabel("Match Score (1.0 is best)")
-    # # plt.xlim((0.8, 0.99999))
-    # plt.show()
 
 
     # 2.3b: Save a copy of the matched and entity-tagged data 
@@ -721,7 +661,8 @@ if REBUILD_DATSETS:
     # 3.2: Make a dataframe organizing the covariates of the gathered datasets
     covariate_dict = {}
     frs_counter = 0
-    for elem_idx, elem in tqdm(list(enumerate(good_matches_org_tagged))):
+    for elem_idx, elem in tqdm(list(key_names_list.iterrows())):
+        elem = tuple(elem)
         url = elem[0]
         submitter_name = elem[1]
         org_name = elem[2]
@@ -781,10 +722,6 @@ if REBUILD_DATSETS:
 
         covariate_dict[elem]['num_org_matches'] = len(org_matches_collected)
 
-
-        # if elem_idx % 50000 == 0:
-        #     print(elem_idx)
-            # print(covariate_dict[elem])
 
     print("FRS counter: " + str(frs_counter))
     print("Finished creating data dicts")
@@ -871,15 +808,6 @@ if REBUILD_DATSETS:
         all_cols = list(filter(lambda x: score_col.split(':')[0] in x,df.columns))
         df.loc[threshold_fail, all_cols] = np.NaN
 
-        # for i in range(len(df)):
-        #     if threshold_fail[i]:
-        #         df.iloc[i,df.columns.get_loc(score_col)]= np.NaN
-        #         df.iloc[i,df.columns.get_loc(score_col) - 1]= np.NaN
-        #         df.iloc[i,df.columns.get_loc(score_col) - 2]= np.NaN
-
-
-        # df[df.columns[df.columns.get_loc(score_col) - 1]][df[score_col]<0.95] = np.NaN
-        # df[df.columns[df.columns.get_loc(score_col) - 2]][df[score_col]<0.95] = np.NaN
 
     name_cols = list(filter(lambda x: "best_match_name" in x,df.columns))
     exact_matches = pd.DataFrame()

@@ -306,7 +306,7 @@ def get_match_candidate_tuple(row, org_name):
     match_score = match_score - (num_unique_tokens_in_common - num_unique_tokens_in_longest_common_substring)*0.1
 
     # added by James
-    match_score -= 0.001 * len(candidate_match_name)/len(longest_common_substring) 
+    match_score -= 0.001 * len(candidate_match_name)/len(longest_common_substring) - 0.001
 
     match_candidate_tuple = (unique_id, candidate_match_name, match_score)
     return match_candidate_tuple
@@ -535,7 +535,6 @@ if REBUILD_DATSETS:
 
     # 1.6: Extract the scraped records with at least one candidate match and take the top top_matches_num (or all if there are < top_matches_num) matches from the scored candidate matches
     # DONE: loop until we get top match from each dataset
-    threshold = 0.95
     counter = 0
     match_counter = 0
     good_matches = {}
@@ -561,11 +560,10 @@ if REBUILD_DATSETS:
         for match_candidate_idx, match_candidate in enumerate(matches):
             if len(collected_sources) == len(sources):
                 break
-            if sum([token in match_candidate[1] for token in elem[2].split(" ")]) > 1:
-                match_candidate_source = match_candidate[0].split('-')[0]
-                if not match_candidate_source in collected_sources:
-                    good_org_matches.append(match_candidate)
-                    collected_sources.add(match_candidate_source)
+            match_candidate_source = match_candidate[0].split('-')[0]
+            if not match_candidate_source in collected_sources:
+                good_org_matches.append(match_candidate)
+                collected_sources.add(match_candidate_source)
 
         good_matches[elem] = good_org_matches
             
@@ -574,89 +572,7 @@ if REBUILD_DATSETS:
     print("Share of records that weren't matchable: " + str(counter / len(match_dict)))
 
 
-    ## PART 2: Attempt to estimate whether comment was submitted by a person or an organization
-    nlp = en_core_web_lg.load()
-
-    # 2.1: Among the matchable scraped comment records, use spacy's ner tagger to tag the tokens in the submitter name and org name of each record. 
-    good_matches_org_tagged = {}
-    num_likely_orgs = 0
-    for elem_idx, elem in tqdm(list(key_names_list.iterrows())):
-        elem = tuple(elem.values)
-        # Consider an org name to likely be a person if the submitter's name isn't empty and if at least one of its tokens gets tagged as corresponding to a person
-        tagged_org_name = []
-        likely_org_check = 1
-        if elem[2] is not None:
-            tagged_org_name = nlp(elem[2])
-            if "PERSON" in [tag.label_ for tag in tagged_org_name.ents]:
-                likely_org_check = 0
-
-        # Default to considering a record to have been submitted by an org
-        likely_org = 1
-        # BUT, consider the record to have been submitted by a person if the name fields aren't empty and at least one token of each name field was tagged as a person
-        if elem[1] is not None and elem[2] is not None and elem[1] != "" and elem[2] != "" and likely_org_check == 0:
-            likely_org = 0
-        # Also consider the record to have been submitted by a person if only one of the name fields was empty and the other had at least one token of each name field was tagged as a person
-        if (elem[1] is None or elem[1] == "") and (elem[2] is not None and elem[2] != "") and likely_org_check == 0:
-            likely_org = 0
-        # (Same as above case but switching which name was empty)
-        if (elem[2] is None or elem[2] == "") and (elem[1] is not None and elem[1] != ""):
-            likely_org = 0        
-        # Also consider the record to have been submitted by a person if the submitter name field has "anonymous anonymous" in it and the org name field is empty
-        if "anonymous anonymous" in elem[1] and (elem[2] is None or elem[2] == ""):
-            likely_org = 0
-            
-        num_likely_orgs += likely_org
-        
-        good_matches_org_tagged[elem] = (good_matches[elem[2]], (likely_org, [X.label_ for X in tagged_org_name.ents]))
-        
-        
-    print("Number of records likely submitted by an organization: " + str(num_likely_orgs))
-    print("Number of matchable records: " + str(len(good_matches)))
-    print("Share of matchable records that were likely submitted by an organization: " + str(num_likely_orgs / len(good_matches)))
-
-
-
-
-
-    # 2.3b: Save a copy of the matched and entity-tagged data 
-    with open(BASE_DIR + "data/finreg_good_matches_org_tagged_" + curr_date + ".pkl", 'wb') as pkl_out:
-        pickle.dump(good_matches_org_tagged, pkl_out)
-
-
     ## PART 3: Create a data from to explore commenter covariates
-
-    # 3.1: Read the gathered datasets in as one dataframe
-    covariate_dfs = {}
-    financial_datasets = [("data/merged_resources/", "FDIC_Institutions"), 
-                    ("data/merged_resources/", "FFIECInstitutions"),
-                    ("data/", "CreditUnions"),
-                    ("data/merged_resources/", "compustat_resources"),
-                    ("data/merged_resources/", "nonprofits_resources"),
-                    ("data/merged_resources/", "SEC_Institutions")
-    ]
-    for financial_dataset_tuple in financial_datasets:
-        df = pd.read_csv(BASE_DIR + financial_dataset_tuple[0] + financial_dataset_tuple[1] + ".csv")
-        covariate_dfs[financial_dataset_tuple[1]] = df
-        
-    # Read in opensecrets dataseparately to deal with quotechar
-    df = pd.read_csv(BASE_DIR + "data/merged_resources/opensecrets_resources_jwVersion.csv", quotechar='"')
-    covariate_dfs['opensecrets_resources_jwVersion'] = df
-        
-    # Merge compustat data to cik data on cik
-    cik_df = pd.read_csv(BASE_DIR + "data/merged_resources/CIK.csv", dtype={"CIK":str})
-    compustat_df = pd.read_csv(BASE_DIR + "data/merged_resources/compustat_resources.csv", dtype={"cik":str})
-    compustat_df.sort_values(by=['year2', 'year1'], ascending=True, inplace=True)
-    compustat_df = compustat_df.drop_duplicates(subset='cik', keep='last', ignore_index=True)
-    compustat_df = compustat_df[['cik', 'marketcap']]
-
-    # James: dtype convert
-    cik_df['cik']= cik_df['cik'].astype('Int64')
-    compustat_df['cik']= compustat_df['cik'].astype('Int64')
-
-    cik_merged_df = cik_df.merge(compustat_df, how='left', left_on='cik', right_on='cik')
-    del cik_merged_df['cik']
-    covariate_dfs['CIK'] = cik_merged_df
-
 
     # 3.2: Make a dataframe organizing the covariates of the gathered datasets
     covariate_dict = {}
@@ -673,10 +589,7 @@ if REBUILD_DATSETS:
         comment_title = elem[5]
         original_org_name = elem[6]
 
-        matches = good_matches_org_tagged[elem][0]
-        tag_data = good_matches_org_tagged[elem][1]
-        is_likely_org = tag_data[0]
-        org_tags = tag_data
+        matches = good_matches[org_name]
 
         
         org_match_covariate_dict = {}
@@ -715,8 +628,6 @@ if REBUILD_DATSETS:
         covariate_dict[elem]['comment_org_name'] = org_name
         covariate_dict[elem]['comment_agency'] = agency_acronym
         covariate_dict[elem]['docket_id'] = docket_id
-        covariate_dict[elem]['is_likely_org'] = is_likely_org
-        covariate_dict[elem]['org_tags'] = str(org_tags)
         covariate_dict[elem]['org_match_type'] = org_match_type
         covariate_dict[elem]['org_best_match_score'] = org_best_match_score  
 

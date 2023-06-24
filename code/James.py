@@ -496,14 +496,14 @@ if REBUILD_DATSETS:
     match_dict = {}
     processed_names = {}
     print("Num scraped records: " + str(len(key_names_list)))
-    for key_name_idx, key_name in tqdm(list(enumerate(key_names_list))[:100]): # remove bound
+    for key_name_idx, key_name in tqdm(list(enumerate(key_names_list))[100000:100100]): # remove bound
         url = key_name[0]
         # submitter_name = key_name[1]
         org_name = key_name[2]
         # name_list = [submitter_name, org_name]
         
         if org_name.strip() == "":
-            match_dict[key_name] = None
+            match_dict[key_name] = []
             continue
 
         if org_name in processed_names:
@@ -532,7 +532,7 @@ if REBUILD_DATSETS:
 
         candidate_matches = []
         # Iterate through the candidate matches to the most informative token
-        for most_unique_org_token, _ in org_token_frequencies[:2]: # uses top 2 most unique tokens
+        for most_unique_org_token, _ in org_token_frequencies[:1]: # uses top 2 most unique tokens
             if most_unique_org_token in candidate_match_dict:
                 for row in candidate_match_dict[most_unique_org_token]:
                     candidate_matches.append(get_match_candidate_tuple(row, org_name))
@@ -592,9 +592,11 @@ if REBUILD_DATSETS:
     counter = 0
     match_counter = 0
     good_matches = {}
-    for elem_idx, elem in tqdm(enumerate(match_dict)):
-        if match_dict[elem] is None or len(match_dict[elem]) == 0:
+    for elem_idx, elem in tqdm(list(enumerate(match_dict))):
+        if len(match_dict[elem]) == 0:
             counter += 1
+            # continue
+            good_matches[elem] = []
             continue
                             
 
@@ -604,16 +606,19 @@ if REBUILD_DATSETS:
         matches = match_dict[elem]
         if len(collected_sources) == len(sources):
             break
-        if len(matches) > 0:
-            match_score = matches[0][2]
-            for match_candidate_idx, match_candidate in enumerate(matches):
-                if len(collected_sources) == len(sources):
-                    break
-                if sum([token in match_candidate[1] for token in elem[2].split(" ")]) > 1:
-                    match_candidate_source = match_candidate[0].split('-')[0]
-                    if not match_candidate_source in collected_sources:
-                        good_org_matches.append(match_candidate)
-                        collected_sources.add(match_candidate_source)
+        if (matches == None) or (len(matches) == 0):
+            good_matches[elem] = None
+            continue
+
+        match_score = matches[0][2]
+        for match_candidate_idx, match_candidate in enumerate(matches):
+            if len(collected_sources) == len(sources):
+                break
+            if sum([token in match_candidate[1] for token in elem[2].split(" ")]) > 1:
+                match_candidate_source = match_candidate[0].split('-')[0]
+                if not match_candidate_source in collected_sources:
+                    good_org_matches.append(match_candidate)
+                    collected_sources.add(match_candidate_source)
 
         good_matches[elem] = good_org_matches
             
@@ -626,10 +631,9 @@ if REBUILD_DATSETS:
     nlp = en_core_web_lg.load()
 
     # 2.1: Among the matchable scraped comment records, use spacy's ner tagger to tag the tokens in the submitter name and org name of each record. 
-    # TODO: investigate good_matches_org_tagged
     good_matches_org_tagged = {}
     num_likely_orgs = 0
-    for elem_idx, elem in tqdm(enumerate(good_matches)):
+    for elem_idx, elem in tqdm(list(enumerate(good_matches))):
         
         # Consider an org name to likely be a person if the submitter's name isn't empty and if at least one of its tokens gets tagged as corresponding to a person
         tagged_org_name = []
@@ -658,8 +662,6 @@ if REBUILD_DATSETS:
         
         good_matches_org_tagged[elem] = (good_matches[elem], (likely_org, [X.label_ for X in tagged_org_name.ents]))
         
-        # if elem_idx % 10000 == 0:
-        #     print(elem_idx)
         
     print("Number of records likely submitted by an organization: " + str(num_likely_orgs))
     print("Number of matchable records: " + str(len(good_matches)))
@@ -719,7 +721,7 @@ if REBUILD_DATSETS:
     # 3.2: Make a dataframe organizing the covariates of the gathered datasets
     covariate_dict = {}
     frs_counter = 0
-    for elem_idx, elem in tqdm(enumerate(good_matches_org_tagged)):
+    for elem_idx, elem in tqdm(list(enumerate(good_matches_org_tagged))):
         url = elem[0]
         submitter_name = elem[1]
         org_name = elem[2]
@@ -790,8 +792,6 @@ if REBUILD_DATSETS:
     variables = set()
     for elem_idx, elem in tqdm(enumerate(covariate_dict)):
         variables = variables.union(set(covariate_dict[elem].keys()))
-        # if elem_idx % 50000 == 0:
-        #     print(elem_idx)
     variables = list(variables)
     variables.sort()
     print("Finished establishing variables")

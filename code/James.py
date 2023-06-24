@@ -415,7 +415,7 @@ if REBUILD_DATSETS:
     #replace none
     df.loc[df['submitter_name'].isna(), "submitter_name"] = ''
 
-    key_names_list = df.iloc[:,:] # include how many to match
+    key_names_list = df.iloc[:5,:] # include how many to match
     # key_names_list = [(elem[0], clean_fin_org_names(elem[1]), clean_fin_org_names(elem[2]), elem[3], elem[4], elem[5]) for elem in key_names_list]
     
 
@@ -561,11 +561,10 @@ if REBUILD_DATSETS:
         for match_candidate_idx, match_candidate in enumerate(matches):
             if len(collected_sources) == len(sources):
                 break
-            if sum([token in match_candidate[1] for token in elem[2].split(" ")]) > 1:
-                match_candidate_source = match_candidate[0].split('-')[0]
-                if not match_candidate_source in collected_sources:
-                    good_org_matches.append(match_candidate)
-                    collected_sources.add(match_candidate_source)
+            match_candidate_source = match_candidate[0].split('-')[0]
+            if not match_candidate_source in collected_sources:
+                good_org_matches.append(match_candidate)
+                collected_sources.add(match_candidate_source)
 
         good_matches[elem] = good_org_matches
             
@@ -703,7 +702,7 @@ if REBUILD_DATSETS:
                     print("this shouldn't be null")
                 org_match_type = org_best_match_id.split("-")[0]
                 org_match_row_num = org_best_match_id.split("-")[1]
-                org_match_covariate_dict.update(get_data_row(org_match_type, int(org_match_row_num), "orgMatch"))
+                # org_match_covariate_dict.update(get_data_row(org_match_type, int(org_match_row_num), "orgMatch"))
                 org_match_covariate_dict[org_match_type + '-orgMatch' + ":best_match_name"] = org_best_match_name
                 org_match_covariate_dict[org_match_type + '-orgMatch' + ":best_match_score"] = org_best_match_score
 
@@ -796,7 +795,7 @@ if REBUILD_DATSETS:
 
     df = covariate_df
     df = df[list(filter(lambda x: not "submitter" in x,df.columns))]
-    df = df[df['comment_org_name']!='']
+    # df = df[df['comment_org_name']!='']
     df.to_csv(BASE_DIR + "data/match_data/match_all_covariates_df_" + curr_date + ".csv")
 
     df = pd.read_csv(BASE_DIR + "data/match_data/match_all_covariates_df_" + curr_date + ".csv")

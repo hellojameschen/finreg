@@ -416,7 +416,7 @@ if REBUILD_DATSETS:
     #replace none
     df.loc[df['submitter_name'].isna(), "submitter_name"] = ''
 
-    key_names_list = df.iloc[100000:100100,:] # include how many to match
+    key_names_list = df.iloc[:,:] # include how many to match
     # key_names_list = [(elem[0], clean_fin_org_names(elem[1]), clean_fin_org_names(elem[2]), elem[3], elem[4], elem[5]) for elem in key_names_list]
     
 

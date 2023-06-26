@@ -290,21 +290,14 @@ def get_match_candidate_score(frequency_dict, org_name, candidate_match_name):
     total_matching_inverse_frequency = 0
     tokenized_name = org_tokens
     for token in tokenized_name:
-        token_frequency = frequency_dict[token]
+        token_frequency = frequency_dict.get(token, 999999) # if token not found, give high frequency to ignore it
         total_inverse_frequency += 1.0/token_frequency
         if token in candidate_match_tokens:
             total_matching_inverse_frequency += 1.0/token_frequency
     match_score = total_matching_inverse_frequency / total_inverse_frequency
 
-    # If the number of tokens in the names are different, penalize 0.1 per token for for tokens not being in order
-    # num_unique_tokens_in_common = len(set(tokenized_name).intersection(candidate_match_tokens))
-    # longest_common_substring = get_longest_common_substring(org_name, candidate_match_name, len(org_name), len(candidate_match_name))
-    # tokenized_longest_common_substring = longest_common_substring.split(" ")
-    # num_unique_tokens_in_longest_common_substring = len(set([elem for elem in tokenized_longest_common_substring if len(elem.strip()) > 0]))
-    # match_score = match_score - (num_unique_tokens_in_common - num_unique_tokens_in_longest_common_substring)*0.1
-
     # added by James
-    weight = 0.2
+    weight = 1/len(org_name)
     longest_common_substring = get_longest_common_substring(org_name, candidate_match_name, len(org_name), len(candidate_match_name))
     match_score -= weight * len(candidate_match_name)/len(longest_common_substring) - weight
 
@@ -375,9 +368,10 @@ if REBUILD_DATSETS:
 
         data = list(zip(unique_ids, all_org_names, financial_datasets))
         org_name_df = pd.DataFrame(data, columns=['unique_id', 'org_name', 'financial_dataset'])
-        org_name_df_lst = []
+        # org_name_df_lst = []
         # for source in sources:
         #     org_name_df_lst.append(org_name_df[org_name_df['financial_dataset']==source]['org_name'].apply(clean_fin_org_names))
+        org_name_df['original_org_name'] = org_name_df['org_name']
         org_name_df['org_name'] = org_name_df['org_name'].apply(clean_fin_org_names)
 
 
@@ -479,11 +473,12 @@ if REBUILD_DATSETS:
         row = org_name_df.iloc[row_idx]
         unique_id = row['unique_id']
         org_name = row['org_name']
+        original_org_name = row['original_org_name']
         for token in org_name.split(" "):
             if token in candidate_match_dict:
-                candidate_match_dict[token].append((unique_id, org_name))
+                candidate_match_dict[token].append((unique_id, org_name, original_org_name))
             else:
-                candidate_match_dict[token] = [(unique_id, org_name)]
+                candidate_match_dict[token] = [(unique_id, org_name, original_org_name)]
                 
 
     # Apply linking dataset
@@ -492,12 +487,11 @@ if REBUILD_DATSETS:
     match_dict = {}
     print("Num scraped records: " + str(len(key_names_list)))
     for key_name_idx, key_name in tqdm(list(key_names_list.iterrows())):
-        url = key_name[0]
-        # submitter_name = key_name[1]
         org_name = key_name[2]
-        
-        if org_name.strip() == "":
-            match_dict[org_name] = []
+        original_org_name = key_name[3]
+
+        if not org_name:
+            match_dict[org_name] = pd.DataFrame()
             continue
 
         if org_name in match_dict:
@@ -515,16 +509,18 @@ if REBUILD_DATSETS:
 
         candidate_matches = []
         # Iterate through the candidate matches to the most informative token
-        for most_unique_org_token, _ in org_token_frequencies[:3]: # uses top 2 most unique tokens
+        for most_unique_org_token, _ in org_token_frequencies[:1]: # uses top 2 most unique tokens
             if most_unique_org_token in candidate_match_dict:
                 for row in candidate_match_dict[most_unique_org_token]:
                     unique_id = row[0]
                     candidate_match_name = row[1]
                     match_score = get_match_candidate_score(candidate_frequency_dict, org_name, candidate_match_name)
-                    candidate_matches.append((unique_id, candidate_match_name, match_score))
+                    # candidate_matches.append((unique_id, candidate_match_name, match_score))
+                    candidate_matches.append((match_score, candidate_match_name, original_org_name, unique_id))
 
         # Sort the candidate matches, first by the match score and then by the absolute value of the difference in the number of tokens between the submitter (or org) name and the candidate match org name
-        candidate_matches.sort(key=lambda x:(-x[2], abs(len(x[1].split(" ")) - len(org_tokens))))
+        candidate_matches.sort(key=lambda x:(-x[0], abs(len(x[1].split(" ")) - len(org_tokens))))
+        candidate_matches = pd.DataFrame(candidate_matches, columns=['match_score','candidate_match_name', 'original_org_name', 'unique_id'])
         #TODO: remove submitters
         # candidate_matches_list.append([])
         # candidate_matches_list.append(candidate_matches)
@@ -548,28 +544,24 @@ if REBUILD_DATSETS:
     match_counter = 0
     good_matches = {}
     for elem_idx, elem in tqdm(list(enumerate(match_dict))):
-        if len(match_dict[elem]) == 0:
-            counter += 1
-            # continue
-            good_matches[elem] = []
-            continue
-                            
 
         # Org name
         good_org_matches = []
         collected_sources = set()
         matches = match_dict[elem]
+
+        if len(matches) == 0:
+            counter += 1   
+
+
         if len(collected_sources) == len(sources):
             break
-        if (matches == None) or (len(matches) == 0):
-            good_matches[elem] = None
-            continue
 
-        match_score = matches[0][2]
-        for match_candidate_idx, match_candidate in enumerate(matches):
+        for match_candidate_idx in range(len(matches)):
+            match_candidate = matches.iloc[match_candidate_idx]
             if len(collected_sources) == len(sources):
                 break
-            match_candidate_source = match_candidate[0].split('-')[0]
+            match_candidate_source = match_candidate['unique_id'].split('-')[0]
             if not match_candidate_source in collected_sources:
                 good_org_matches.append(match_candidate)
                 collected_sources.add(match_candidate_source)
@@ -682,7 +674,7 @@ if REBUILD_DATSETS:
         if len(matches) > 0:
             for match in matches:
                 org_best_match = match
-                org_best_match_id = org_best_match[0]
+                org_best_match_id = org_best_match['unique_id']
                 org_match_type = org_best_match_id.split("-")[0]
                 if not org_match_type in org_types_collected:
                     org_matches_collected.append(match)
@@ -690,16 +682,18 @@ if REBUILD_DATSETS:
 
             for org_match in org_matches_collected:
                 org_best_match = org_match
-                org_best_match_id = org_best_match[0]
-                org_best_match_name = org_best_match[1]
-                org_best_match_score = clean_match_score(org_best_match[2])
+                org_best_match_id = org_best_match['unique_id']
+                org_best_match_name = org_best_match['candidate_match_name']
+                original_best_match_name = org_best_match['original_org_name']
+                org_best_match_score = clean_match_score(org_best_match['match_score'])
                 if pd.isnull(org_best_match_score):
                     print("this shouldn't be null")
                 org_match_type = org_best_match_id.split("-")[0]
                 org_match_row_num = org_best_match_id.split("-")[1]
                 # org_match_covariate_dict.update(get_data_row(org_match_type, int(org_match_row_num), "orgMatch"))
-                org_match_covariate_dict[org_match_type + '-orgMatch' + ":best_match_name"] = org_best_match_name
                 org_match_covariate_dict[org_match_type + '-orgMatch' + ":best_match_score"] = org_best_match_score
+                org_match_covariate_dict[org_match_type + '-orgMatch' + ":best_match_name"] = org_best_match_name
+                org_match_covariate_dict[org_match_type + '-orgMatch' + ":original_match_name"] = original_best_match_name
 
         
         covariate_dict[elem] = {**org_match_covariate_dict}
@@ -744,7 +738,8 @@ if REBUILD_DATSETS:
     # 3.3: Save the dataframe of scraped records with attached covariates
 
     # filter columns
-    common_tails = ['best_match_name', 
+    common_tails = ['best_match_name',
+                    'original_match_name', 
                     'best_match_score', 
                     'CIK', 
                     'CU_NUMBER', 

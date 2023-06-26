@@ -1,9 +1,12 @@
 import pandas as pd
 import numpy as np
+from datetime import date
+today_for_filenames = date.today()
+curr_date = str(today_for_filenames.strftime("%Y%m%d"))
 
 BASE_DIR = '/Users/jameschen/Team Name Dropbox/James Chen/FINREGRULEMAKE2/finreg/data/match_data/'
-in_file = "match_all_covariates_df_20230624.csv"
-out_file = "validation_20230624.xlsx"
+in_file = f"match_all_covariates_df_{curr_date}.csv"
+out_file = f"validation_{curr_date}.xlsx"
 
 
 def get_best(df):
@@ -21,5 +24,6 @@ df['hand_match']=''
 
 
 
-df.to_excel(BASE_DIR + out_file)
+
+df.to_excel(BASE_DIR + out_file, index=False)
 

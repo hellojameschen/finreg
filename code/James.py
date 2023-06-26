@@ -415,7 +415,7 @@ if REBUILD_DATSETS:
     #replace none
     df.loc[df['submitter_name'].isna(), "submitter_name"] = ''
 
-    key_names_list = df.iloc[:5,:] # include how many to match
+    key_names_list = df.iloc[:,:] # include how many to match
     # key_names_list = [(elem[0], clean_fin_org_names(elem[1]), clean_fin_org_names(elem[2]), elem[3], elem[4], elem[5]) for elem in key_names_list]
     
 
@@ -456,15 +456,20 @@ if REBUILD_DATSETS:
     # submitter_frequency_dict = {}
     org_frequency_dict = {}
     for _, key_name in key_names_list.iterrows():
-        url = key_name[0]
         org_name = key_name[2]
-
-
         for token in org_name.split(" "):
             if token in org_frequency_dict:
                 org_frequency_dict[token] += 1
             else:
                 org_frequency_dict[token] = 1
+
+    candidate_frequency_dict = {}
+    for org_name in tqdm(org_name_df['org_name']):
+        for token in org_name.split(" "):
+            if token in candidate_frequency_dict:
+                candidate_frequency_dict[token] += 1
+            else:
+                candidate_frequency_dict[token] = 1
 
     # Create linking dataset
     # 1.4: Create a dict mapping from tokens in the gathered org datasets to IDs and org_names that contain that token
@@ -502,7 +507,9 @@ if REBUILD_DATSETS:
         
         # Get the frequencies (in the scraped comment db) of the tokens in the submitter name and org name
         # submitter_token_frequencies = sorted([(submitter_token, submitter_frequency_dict[submitter_token]) for submitter_token in submitter_tokens], key=lambda x: x[1])
-        org_token_frequencies = sorted([(org_token, org_frequency_dict[org_token]) for org_token in org_tokens], key=lambda x: x[1])
+        org_token_frequencies = [(org_token, candidate_frequency_dict.get(org_token)) for org_token in org_tokens]
+        org_token_frequencies = list(filter(lambda item: item[1] is not None, org_token_frequencies))
+        org_token_frequencies = sorted(org_token_frequencies, key=lambda x: x[1])
         
 
         candidate_matches = []
@@ -580,47 +587,34 @@ if REBUILD_DATSETS:
     good_matches_org_tagged = {}
     num_likely_orgs = 0
     for elem_idx, elem in tqdm(list(key_names_list.iterrows())):
-        elem = tuple(elem.values)
         # Consider an org name to likely be a person if the submitter's name isn't empty and if at least one of its tokens gets tagged as corresponding to a person
         tagged_org_name = []
         likely_org_check = 1
-        if elem[2] is not None:
-            tagged_org_name = nlp(elem[2])
+        if elem['organization'] is not None:
+            tagged_org_name = nlp(elem['organization'])
             if "PERSON" in [tag.label_ for tag in tagged_org_name.ents]:
                 likely_org_check = 0
 
         # Default to considering a record to have been submitted by an org
         likely_org = 1
         # BUT, consider the record to have been submitted by a person if the name fields aren't empty and at least one token of each name field was tagged as a person
-        if elem[1] is not None and elem[2] is not None and elem[1] != "" and elem[2] != "" and likely_org_check == 0:
+        if elem['submitter_name'] is not None and elem['organization'] is not None and elem['submitter_name'] != "" and elem['organization'] != "" and likely_org_check == 0:
             likely_org = 0
         # Also consider the record to have been submitted by a person if only one of the name fields was empty and the other had at least one token of each name field was tagged as a person
-        if (elem[1] is None or elem[1] == "") and (elem[2] is not None and elem[2] != "") and likely_org_check == 0:
+        if (elem['submitter_name'] is None or elem['submitter_name'] == "") and (elem['organization'] is not None and elem['organization'] != "") and likely_org_check == 0:
             likely_org = 0
         # (Same as above case but switching which name was empty)
-        if (elem[2] is None or elem[2] == "") and (elem[1] is not None and elem[1] != ""):
+        if (elem['organization'] is None or elem['organization'] == "") and (elem['submitter_name'] is not None and elem['submitter_name'] != ""):
             likely_org = 0        
         # Also consider the record to have been submitted by a person if the submitter name field has "anonymous anonymous" in it and the org name field is empty
-        if "anonymous anonymous" in elem[1] and (elem[2] is None or elem[2] == ""):
+        if "anonymous anonymous" in elem['submitter_name'] and (elem['organization'] is None or elem['organization'] == ""):
             likely_org = 0
             
         num_likely_orgs += likely_org
         
-        good_matches_org_tagged[elem] = (good_matches[elem[2]], (likely_org, [X.label_ for X in tagged_org_name.ents]))
+        good_matches_org_tagged[tuple(elem.values)] = (good_matches[elem['organization']], (likely_org, [X.label_ for X in tagged_org_name.ents]))
         
         
-    print("Number of records likely submitted by an organization: " + str(num_likely_orgs))
-    print("Number of matchable records: " + str(len(good_matches)))
-    print("Share of matchable records that were likely submitted by an organization: " + str(num_likely_orgs / len(good_matches)))
-
-
-
-
-
-    # 2.3b: Save a copy of the matched and entity-tagged data 
-    with open(BASE_DIR + "data/finreg_good_matches_org_tagged_" + curr_date + ".pkl", 'wb') as pkl_out:
-        pickle.dump(good_matches_org_tagged, pkl_out)
-
 
     ## PART 3: Create a data from to explore commenter covariates
 
@@ -778,7 +772,7 @@ if REBUILD_DATSETS:
                       'comment_org_name',
                       'comment_submitter_name',
                       'docket_id',
-                      'comment_url']
+                      'comment_url',]
     important_cols = [x for x in covariate_df.columns if (x.split(':')[-1] in common_tails) or (x in important_cols)]
     covariate_df= covariate_df[important_cols]
 
@@ -801,9 +795,11 @@ if REBUILD_DATSETS:
     df = pd.read_csv(BASE_DIR + "data/match_data/match_all_covariates_df_" + curr_date + ".csv")
     df = df.drop("Unnamed: 0", axis=1)
 
+    threshold = 0.95
+
     score_cols = list(filter(lambda x: "score" in x,df.columns))
     for score_col in score_cols:
-        threshold_fail = df[score_col]<0.95
+        threshold_fail = df[score_col]<threshold
         all_cols = list(filter(lambda x: score_col.split(':')[0] in x,df.columns))
         df.loc[threshold_fail, all_cols] = np.NaN
 
@@ -819,7 +815,7 @@ if REBUILD_DATSETS:
           value = new_col)
     
     cols = list(df.columns)
-    cols[:7]= [
+    front = [
         'comment_agency',
         'original_org_name',
         'comment_url',
@@ -828,6 +824,7 @@ if REBUILD_DATSETS:
         'num_org_matches',
         'exact_match_present',
         ]
+    cols[:len(front)]= front
     
     df = df[cols]
 

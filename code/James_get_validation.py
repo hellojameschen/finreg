@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 
 BASE_DIR = '/Users/jameschen/Team Name Dropbox/James Chen/FINREGRULEMAKE2/finreg/data/match_data/'
-in_file = "match_df_20230624.csv"
+in_file = "match_all_covariates_df_20230624.csv"
 out_file = "validation_20230624.xlsx"
 
 

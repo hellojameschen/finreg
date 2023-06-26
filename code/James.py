@@ -279,7 +279,7 @@ def get_quantile_by_variable(df, ascending_sort_var, ascending_quantile_start, a
     quantile_df = df.iloc[start_idx:end_idx, :]
     return quantile_df[vars_to_describe]
 
-def get_match_candidate_score(org_name, candidate_match_name):
+def get_match_candidate_score(frequency_dict, org_name, candidate_match_name):
     org_tokens = org_name.split(' ')
     
     # tokenize the candidate match
@@ -290,7 +290,7 @@ def get_match_candidate_score(org_name, candidate_match_name):
     total_matching_inverse_frequency = 0
     tokenized_name = org_tokens
     for token in tokenized_name:
-        token_frequency = org_frequency_dict[token]
+        token_frequency = frequency_dict[token]
         total_inverse_frequency += 1.0/token_frequency
         if token in candidate_match_tokens:
             total_matching_inverse_frequency += 1.0/token_frequency
@@ -454,15 +454,15 @@ if REBUILD_DATSETS:
 
     # 1.3: Create 2 dicts with frequency counts of every token in the org and submitter name fields of the scraped comments db
     # submitter_frequency_dict = {}
-    org_frequency_dict = {}
-    for _, key_name in key_names_list.iterrows():
-        org_name = key_name[2]
-        for token in org_name.split(" "):
-            if token in org_frequency_dict:
-                org_frequency_dict[token] += 1
-            else:
-                org_frequency_dict[token] = 1
-
+    # org_frequency_dict = {}
+    # for _, key_name in key_names_list.iterrows():
+    #     org_name = key_name[2]
+    #     for token in org_name.split(" "):
+    #         if token in org_frequency_dict:
+    #             org_frequency_dict[token] += 1
+    #         else:
+    #             org_frequency_dict[token] = 1
+    print('Preparing candidate frequency dictionary.')
     candidate_frequency_dict = {}
     for org_name in tqdm(org_name_df['org_name']):
         for token in org_name.split(" "):
@@ -474,6 +474,7 @@ if REBUILD_DATSETS:
     # Create linking dataset
     # 1.4: Create a dict mapping from tokens in the gathered org datasets to IDs and org_names that contain that token
     candidate_match_dict = {}
+    print('Preparing candidate match dictionary.')
     for row_idx in tqdm(range(len(org_name_df))):
         row = org_name_df.iloc[row_idx]
         unique_id = row['unique_id']
@@ -514,12 +515,12 @@ if REBUILD_DATSETS:
 
         candidate_matches = []
         # Iterate through the candidate matches to the most informative token
-        for most_unique_org_token, _ in org_token_frequencies[:1]: # uses top 2 most unique tokens
+        for most_unique_org_token, _ in org_token_frequencies[:3]: # uses top 2 most unique tokens
             if most_unique_org_token in candidate_match_dict:
                 for row in candidate_match_dict[most_unique_org_token]:
                     unique_id = row[0]
                     candidate_match_name = row[1]
-                    match_score = get_match_candidate_score(org_name, candidate_match_name)
+                    match_score = get_match_candidate_score(candidate_frequency_dict, org_name, candidate_match_name)
                     candidate_matches.append((unique_id, candidate_match_name, match_score))
 
         # Sort the candidate matches, first by the match score and then by the absolute value of the difference in the number of tokens between the submitter (or org) name and the candidate match org name

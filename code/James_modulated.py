@@ -26,6 +26,7 @@ import corp_simplify_utils
 import seaborn as sns
 import matplotlib.pyplot as plt
 from collections import Counter
+from difflib import SequenceMatcher
 
 # nlp
 import spacy
@@ -99,66 +100,9 @@ LAST_SAVE_DATASET_DATE = "20220402" # Needs to be set to the last date the 'rebu
 # function to find and print 
 # the longest common substring of
 # X[0..m-1] and Y[0..n-1]
-def get_longest_common_substring(X, Y, m, n):
- 
-    # Create a table to store lengths of
-    # longest common suffixes of substrings.
-    # Note that LCSuff[i][j] contains length
-    # of longest common suffix of X[0..i-1] and
-    # Y[0..j-1]. The first row and first
-    # column entries have no logical meaning,
-    # they are used only for simplicity of program
-    LCSuff = [[0 for i in range(n + 1)]
-                 for j in range(m + 1)]
- 
-    # To store length of the
-    # longest common substring
-    length = 0
- 
-    # To store the index of the cell
-    # which contains the maximum value.
-    # This cell's index helps in building
-    # up the longest common substring
-    # from right to left.
-    row, col = 0, 0
- 
-    # Following steps build LCSuff[m+1][n+1]
-    # in bottom up fashion.
-    for i in range(m + 1):
-        for j in range(n + 1):
-            if i == 0 or j == 0:
-                LCSuff[i][j] = 0
-            elif X[i - 1] == Y[j - 1]:
-                LCSuff[i][j] = LCSuff[i - 1][j - 1] + 1
-                if length < LCSuff[i][j]:
-                    length = LCSuff[i][j]
-                    row = i
-                    col = j
-            else:
-                LCSuff[i][j] = 0
- 
-    # if true, then no common substring exists
-    if length == 0:
-        return ""
- 
-    # allocate space for the longest
-    # common substring
-    resultStr = ['0'] * length
- 
-    # traverse up diagonally form the
-    # (row, col) cell until LCSuff[row][col] != 0
-    while LCSuff[row][col] != 0:
-        length -= 1
-        resultStr[length] = X[row - 1] # or Y[col-1]
- 
-        # move diagonally up to previous cell
-        row -= 1
-        col -= 1
- 
-    # required longest common substring
-    longest_common_substring = ''.join(resultStr)
-
-    return longest_common_substring
+def get_longest_common_substring(string1, string2):
+    match = SequenceMatcher(None, string1, string2, autojunk=False).find_longest_match()
+    return string1[match.a:match.a + match.size]
 
 
 # Function from Brad Hackinen's NAMA
@@ -205,46 +149,6 @@ def clean_fin_org_names(name):
         
         
         return corpHash(name)
-
-
-# Function for organizing the covariates available for each of the gathered datasets
-# def get_data_row(match_type, match_row_num, match_on_type):
-
-#     df = covariate_dfs[match_type]
-#     column_names = df.columns
-#     match_covariates = df.iloc[match_row_num]
-    
-#     covariate_dict = {'row_id':match_row_num, 'row_type':match_type}
-#     for elem_idx, elem in enumerate(match_covariates):
-#         var_name = match_type + "-" + match_on_type + ":" + column_names[elem_idx]
-#         val = elem
-#         covariate_dict[var_name] = val
-
-#     return covariate_dict
-    
-# Function to clean numeric fields that may have text like K for thousand
-def clean_financial_measure(x):
-    if x is None or x is np.nan or pd.isnull(x) or x == "":
-        return np.nan
-    elif isinstance(x, str) and not x.isnumeric():
-        unit_multiplier = 1
-        if "B" in x:
-            x = x[:-1]
-            unit_multiplier = 1000000000
-        if "M" in x:
-            x = x[:-1]
-            unit_multiplier = 1000000
-        if "K" in x:
-            x = x[:-1]
-            unit_multiplier = 1000
-        x = x.replace(",", "")
-        try:
-            x = float(x) * unit_multiplier
-            return x
-        except:
-            return np.nan
-    else:
-        return float(x)
     
 
 def clean_match_score(x):
@@ -269,15 +173,6 @@ def clean_match_score(x):
             return np.nan
     else:
         return float(x)
-
-def get_quantile_by_variable(df, ascending_sort_var, ascending_quantile_start, ascending_quantile_end, vars_to_describe):
-
-    df.sort_values(ascending_sort_var, ascending=True, inplace=True)
-    num_rows = df.shape[0]
-    start_idx = int(ascending_quantile_start * num_rows)
-    end_idx = int(ascending_quantile_end * num_rows)
-    quantile_df = df.iloc[start_idx:end_idx, :]
-    return quantile_df[vars_to_describe]
 
 def get_match_candidate_score(frequency_dict, org_name, candidate_match_name):
     org_tokens = org_name.split(' ')
@@ -305,8 +200,7 @@ def get_match_candidate_score(frequency_dict, org_name, candidate_match_name):
 
 
 
-REBUILD_DATSETS = True
-if REBUILD_DATSETS:
+def get_financial_dataset():
 
     ## PART 1: Match records from the gathered organization datasets (FDIC, FFEIC, Nonprofits, CIK, Compustat, etc.) to scraped comments
 
@@ -374,9 +268,11 @@ if REBUILD_DATSETS:
         org_name_df['original_org_name'] = org_name_df['org_name']
         org_name_df['org_name'] = org_name_df['org_name'].apply(clean_fin_org_names)
 
+        return org_name_df
 
 
 
+def get_comment_dataset():
     # 1.2: Read and clean submitter and org names from scraped comments
     connection=apsw.Connection(DB_PATH)
     c=connection.cursor()
@@ -409,41 +305,9 @@ if REBUILD_DATSETS:
     #replace none
     df.loc[df['submitter_name'].isna(), "submitter_name"] = ''
 
-    key_names_list = df.iloc[:,:] # include how many to match
-    # key_names_list = [(elem[0], clean_fin_org_names(elem[1]), clean_fin_org_names(elem[2]), elem[3], elem[4], elem[5]) for elem in key_names_list]
-    
+    # key_names_list = df.iloc[:,:] # include how many to match
 
-
-    # Make a (slightly) educated guess as to the submitter_name and organization for the Fed
-    """
-    new_key_names_list = []
-    for elem in key_names_list:
-        submitter_name = elem[1]
-        org_name = elem[2]
-        agency_acronym = elem[3]
-        # TODO: we may need to consider the names
-        # if agency_acronym == "FRS":
-        #     comment_title = elem[5]
-        #     if "(" in comment_title:
-        #         comment_title = comment_title[:comment_title.index("(")].strip()
-        #     clauses = comment_title.split(",")
-        #     if len(clauses) == 0:
-        #         clauses = comment_title.split(";")
-        #     if len(clauses) == 0:
-        #         pass
-        #     elif len(clauses) == 1:
-        #         org_name = clean_fin_org_names(clauses[0])
-        #         submitter_name = org_name
-        #     else:
-        #         org_name = clean_fin_org_names(clauses[0])
-        #         submitter_name = clean_fin_org_names(clauses[1])
-        #     print(submitter_name + " | " + org_name)
-        new_key_names = (elem[0], submitter_name, org_name, agency_acronym, elem[4])
-        new_key_names_list.append(new_key_names)
-
-    key_names_list = new_key_names_list
-    """
-    print("Finished cleaning")
+    return key_names_list
 
 
     # 1.3: Create 2 dicts with frequency counts of every token in the org and submitter name fields of the scraped comments db
@@ -456,6 +320,8 @@ if REBUILD_DATSETS:
     #             org_frequency_dict[token] += 1
     #         else:
     #             org_frequency_dict[token] = 1
+
+def get_matches(org_name_df, key_names_list):
     print('Preparing candidate frequency dictionary.')
     candidate_frequency_dict = {}
     for org_name in tqdm(org_name_df['org_name']):

@@ -208,19 +208,19 @@ def clean_fin_org_names(name):
 
 
 # Function for organizing the covariates available for each of the gathered datasets
-# def get_data_row(match_type, match_row_num, match_on_type):
+def get_data_row(match_type, match_row_num, match_on_type):
 
-#     df = covariate_dfs[match_type]
-#     column_names = df.columns
-#     match_covariates = df.iloc[match_row_num]
+    df = covariate_dfs[match_type]
+    column_names = df.columns
+    match_covariates = df.iloc[match_row_num]
     
-#     covariate_dict = {'row_id':match_row_num, 'row_type':match_type}
-#     for elem_idx, elem in enumerate(match_covariates):
-#         var_name = match_type + "-" + match_on_type + ":" + column_names[elem_idx]
-#         val = elem
-#         covariate_dict[var_name] = val
+    covariate_dict = {'row_id':match_row_num, 'row_type':match_type}
+    for elem_idx, elem in enumerate(match_covariates):
+        var_name = match_type + "-" + match_on_type + ":" + column_names[elem_idx]
+        val = elem
+        covariate_dict[var_name] = val
 
-#     return covariate_dict
+    return covariate_dict
     
 # Function to clean numeric fields that may have text like K for thousand
 def clean_financial_measure(x):
@@ -245,6 +245,41 @@ def clean_financial_measure(x):
             return np.nan
     else:
         return float(x)
+    
+# 3.1: Read the gathered datasets in as one dataframe
+def get_covariate_dfs():
+    covariate_dfs = {}
+    financial_datasets = [("data/merged_resources/", "FDIC_Institutions"), 
+                    ("data/merged_resources/", "FFIECInstitutions"),
+                    ("data/", "CreditUnions"),
+                    ("data/merged_resources/", "compustat_resources"),
+                    ("data/merged_resources/", "nonprofits_resources"),
+                    ("data/merged_resources/", "SEC_Institutions")
+    ]
+    for financial_dataset_tuple in financial_datasets:
+        df = pd.read_csv(BASE_DIR + financial_dataset_tuple[0] + financial_dataset_tuple[1] + ".csv")
+        covariate_dfs[financial_dataset_tuple[1]] = df
+        
+    # Read in opensecrets dataseparately to deal with quotechar
+    df = pd.read_csv(BASE_DIR + "data/merged_resources/opensecrets_resources_jwVersion.csv", quotechar='"')
+    covariate_dfs['opensecrets_resources_jwVersion'] = df
+        
+    # Merge compustat data to cik data on cik
+    cik_df = pd.read_csv(BASE_DIR + "data/merged_resources/CIK.csv", dtype={"CIK":str})
+    compustat_df = pd.read_csv(BASE_DIR + "data/merged_resources/compustat_resources.csv", dtype={"cik":str})
+    compustat_df.sort_values(by=['year2', 'year1'], ascending=True, inplace=True)
+    compustat_df = compustat_df.drop_duplicates(subset='cik', keep='last', ignore_index=True)
+    compustat_df = compustat_df[['cik', 'marketcap']]
+
+    # James: dtype convert
+    cik_df['cik']= cik_df['cik'].astype('Int64')
+    compustat_df['cik']= compustat_df['cik'].astype('Int64')
+
+    cik_merged_df = cik_df.merge(compustat_df, how='left', left_on='cik', right_on='cik')
+    del cik_merged_df['cik']
+    covariate_dfs['CIK'] = cik_merged_df
+
+    return covariate_dfs
     
 
 def clean_match_score(x):
@@ -610,39 +645,7 @@ if REBUILD_DATSETS:
         
 
     ## PART 3: Create a data from to explore commenter covariates
-
-    # 3.1: Read the gathered datasets in as one dataframe
-    covariate_dfs = {}
-    financial_datasets = [("data/merged_resources/", "FDIC_Institutions"), 
-                    ("data/merged_resources/", "FFIECInstitutions"),
-                    ("data/", "CreditUnions"),
-                    ("data/merged_resources/", "compustat_resources"),
-                    ("data/merged_resources/", "nonprofits_resources"),
-                    ("data/merged_resources/", "SEC_Institutions")
-    ]
-    for financial_dataset_tuple in financial_datasets:
-        df = pd.read_csv(BASE_DIR + financial_dataset_tuple[0] + financial_dataset_tuple[1] + ".csv")
-        covariate_dfs[financial_dataset_tuple[1]] = df
-        
-    # Read in opensecrets dataseparately to deal with quotechar
-    df = pd.read_csv(BASE_DIR + "data/merged_resources/opensecrets_resources_jwVersion.csv", quotechar='"')
-    covariate_dfs['opensecrets_resources_jwVersion'] = df
-        
-    # Merge compustat data to cik data on cik
-    cik_df = pd.read_csv(BASE_DIR + "data/merged_resources/CIK.csv", dtype={"CIK":str})
-    compustat_df = pd.read_csv(BASE_DIR + "data/merged_resources/compustat_resources.csv", dtype={"cik":str})
-    compustat_df.sort_values(by=['year2', 'year1'], ascending=True, inplace=True)
-    compustat_df = compustat_df.drop_duplicates(subset='cik', keep='last', ignore_index=True)
-    compustat_df = compustat_df[['cik', 'marketcap']]
-
-    # James: dtype convert
-    cik_df['cik']= cik_df['cik'].astype('Int64')
-    compustat_df['cik']= compustat_df['cik'].astype('Int64')
-
-    cik_merged_df = cik_df.merge(compustat_df, how='left', left_on='cik', right_on='cik')
-    del cik_merged_df['cik']
-    covariate_dfs['CIK'] = cik_merged_df
-
+    covariate_dfs = get_covariate_dfs()
 
     # 3.2: Make a dataframe organizing the covariates of the gathered datasets
     covariate_dict = {}
@@ -690,7 +693,7 @@ if REBUILD_DATSETS:
                     print("this shouldn't be null")
                 org_match_type = org_best_match_id.split("-")[0]
                 org_match_row_num = org_best_match_id.split("-")[1]
-                # org_match_covariate_dict.update(get_data_row(org_match_type, int(org_match_row_num), "orgMatch"))
+                org_match_covariate_dict.update(get_data_row(org_match_type, int(org_match_row_num), "orgMatch"))
                 org_match_covariate_dict[org_match_type + '-orgMatch' + ":best_match_score"] = org_best_match_score
                 org_match_covariate_dict[org_match_type + '-orgMatch' + ":best_match_name"] = org_best_match_name
                 org_match_covariate_dict[org_match_type + '-orgMatch' + ":original_match_name"] = original_best_match_name

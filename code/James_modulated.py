@@ -192,12 +192,59 @@ def get_match_candidate_score(frequency_dict, org_name, candidate_match_name):
 
     # added by James
     weight = 1/len(org_name)
-    longest_common_substring = get_longest_common_substring(org_name, candidate_match_name, len(org_name), len(candidate_match_name))
+    longest_common_substring = get_longest_common_substring(org_name, candidate_match_name)
     match_score -= weight * len(candidate_match_name)/len(longest_common_substring) - weight
 
     return match_score
 
+# 3.1: Read the gathered datasets in as one dataframe
+def get_covariate_dfs():
+    covariate_dfs = {}
+    financial_datasets = [("data/merged_resources/", "FDIC_Institutions"), 
+                    ("data/merged_resources/", "FFIECInstitutions"),
+                    ("data/", "CreditUnions"),
+                    ("data/merged_resources/", "compustat_resources"),
+                    ("data/merged_resources/", "nonprofits_resources"),
+                    ("data/merged_resources/", "SEC_Institutions")
+    ]
+    for financial_dataset_tuple in financial_datasets:
+        df = pd.read_csv(BASE_DIR + financial_dataset_tuple[0] + financial_dataset_tuple[1] + ".csv")
+        covariate_dfs[financial_dataset_tuple[1]] = df
+        
+    # Read in opensecrets dataseparately to deal with quotechar
+    df = pd.read_csv(BASE_DIR + "data/merged_resources/opensecrets_resources_jwVersion.csv", quotechar='"')
+    covariate_dfs['opensecrets_resources_jwVersion'] = df
+        
+    # Merge compustat data to cik data on cik
+    cik_df = pd.read_csv(BASE_DIR + "data/merged_resources/CIK.csv", dtype={"CIK":str})
+    compustat_df = pd.read_csv(BASE_DIR + "data/merged_resources/compustat_resources.csv", dtype={"cik":str})
+    compustat_df.sort_values(by=['year2', 'year1'], ascending=True, inplace=True)
+    compustat_df = compustat_df.drop_duplicates(subset='cik', keep='last', ignore_index=True)
+    compustat_df = compustat_df[['cik', 'marketcap']]
 
+    # James: dtype convert
+    cik_df['cik']= cik_df['cik'].astype('Int64')
+    compustat_df['cik']= compustat_df['cik'].astype('Int64')
+
+    cik_merged_df = cik_df.merge(compustat_df, how='left', left_on='cik', right_on='cik')
+    del cik_merged_df['cik']
+    covariate_dfs['CIK'] = cik_merged_df
+
+    return covariate_dfs
+
+def get_data_row(covariate_dfs, match_type, match_row_num, match_on_type):
+
+    df = covariate_dfs[match_type]
+    column_names = df.columns
+    match_covariates = df.iloc[match_row_num]
+    
+    covariate_dict = {'row_id':match_row_num, 'row_type':match_type}
+    for elem_idx, elem in enumerate(match_covariates):
+        var_name = match_type + "-" + match_on_type + ":" + column_names[elem_idx]
+        val = elem
+        covariate_dict[var_name] = val
+
+    return covariate_dict
 
 def get_organization_dataset():
 
@@ -304,7 +351,7 @@ def get_comment_dataset():
 
     # key_names_list = df.iloc[:,:] # include how many to match
 
-    return key_names_list
+    return df
 
 
     # 1.3: Create 2 dicts with frequency counts of every token in the org and submitter name fields of the scraped comments db
@@ -402,11 +449,9 @@ def get_matches(org_name_df, key_names_list):
 
     # 1.6: Extract the scraped records with at least one candidate match and take the top top_matches_num (or all if there are < top_matches_num) matches from the scored candidate matches
     # DONE: loop until we get top match from each dataset
-    threshold = 0.95
     counter = 0
-    match_counter = 0
     good_matches = {}
-    for elem_idx, elem in tqdm(list(enumerate(match_dict))):
+    for elem in tqdm(list(match_dict.keys())):
 
         # Org name
         good_org_matches = []
@@ -431,47 +476,12 @@ def get_matches(org_name_df, key_names_list):
 
         good_matches[elem] = good_org_matches
         
-        
-
     ## PART 3: Create a data from to explore commenter covariates
-
-    # 3.1: Read the gathered datasets in as one dataframe
-    covariate_dfs = {}
-    financial_datasets = [("data/merged_resources/", "FDIC_Institutions"), 
-                    ("data/merged_resources/", "FFIECInstitutions"),
-                    ("data/", "CreditUnions"),
-                    ("data/merged_resources/", "compustat_resources"),
-                    ("data/merged_resources/", "nonprofits_resources"),
-                    ("data/merged_resources/", "SEC_Institutions")
-    ]
-    for financial_dataset_tuple in financial_datasets:
-        df = pd.read_csv(BASE_DIR + financial_dataset_tuple[0] + financial_dataset_tuple[1] + ".csv")
-        covariate_dfs[financial_dataset_tuple[1]] = df
-        
-    # Read in opensecrets dataseparately to deal with quotechar
-    df = pd.read_csv(BASE_DIR + "data/merged_resources/opensecrets_resources_jwVersion.csv", quotechar='"')
-    covariate_dfs['opensecrets_resources_jwVersion'] = df
-        
-    # Merge compustat data to cik data on cik
-    cik_df = pd.read_csv(BASE_DIR + "data/merged_resources/CIK.csv", dtype={"CIK":str})
-    compustat_df = pd.read_csv(BASE_DIR + "data/merged_resources/compustat_resources.csv", dtype={"cik":str})
-    compustat_df.sort_values(by=['year2', 'year1'], ascending=True, inplace=True)
-    compustat_df = compustat_df.drop_duplicates(subset='cik', keep='last', ignore_index=True)
-    compustat_df = compustat_df[['cik', 'marketcap']]
-
-    # James: dtype convert
-    cik_df['cik']= cik_df['cik'].astype('Int64')
-    compustat_df['cik']= compustat_df['cik'].astype('Int64')
-
-    cik_merged_df = cik_df.merge(compustat_df, how='left', left_on='cik', right_on='cik')
-    del cik_merged_df['cik']
-    covariate_dfs['CIK'] = cik_merged_df
-
-
+    covariate_dfs = get_covariate_dfs()
     # 3.2: Make a dataframe organizing the covariates of the gathered datasets
     covariate_dict = {}
     frs_counter = 0
-    for elem_idx, elem in tqdm(list(key_names_list.iterrows())):
+    for _, elem in tqdm(list(key_names_list.iterrows())):
         elem = tuple(elem)
         url = elem[0]
         submitter_name = elem[1]
@@ -483,7 +493,7 @@ def get_matches(org_name_df, key_names_list):
         comment_title = elem[5]
         original_org_name = elem[6]
 
-        matches = good_matches[elem['organization']]
+        matches = good_matches[org_name]
 
         
         org_match_covariate_dict = {}
@@ -511,7 +521,7 @@ def get_matches(org_name_df, key_names_list):
                     print("this shouldn't be null")
                 org_match_type = org_best_match_id.split("-")[0]
                 org_match_row_num = org_best_match_id.split("-")[1]
-                # org_match_covariate_dict.update(get_data_row(org_match_type, int(org_match_row_num), "orgMatch"))
+                org_match_covariate_dict.update(get_data_row(covariate_dfs, org_match_type, int(org_match_row_num), "orgMatch"))
                 org_match_covariate_dict[org_match_type + '-orgMatch' + ":best_match_score"] = org_best_match_score
                 org_match_covariate_dict[org_match_type + '-orgMatch' + ":best_match_name"] = org_best_match_name
                 org_match_covariate_dict[org_match_type + '-orgMatch' + ":original_match_name"] = original_best_match_name
@@ -530,29 +540,27 @@ def get_matches(org_name_df, key_names_list):
         covariate_dict[elem]['num_org_matches'] = len(org_matches_collected)
 
 
-    print("FRS counter: " + str(frs_counter))
-    print("Finished creating data dicts")
-
     variables = set()
     for elem_idx, elem in tqdm(enumerate(covariate_dict)):
         variables = variables.union(set(covariate_dict[elem].keys()))
     variables = list(variables)
     variables.sort()
-    print("Finished establishing variables")
 
     data = []
-    for elem_idx, elem in tqdm(enumerate(covariate_dict)):
+    for elem in tqdm(covariate_dict.keys()):
         elem_data_dict = covariate_dict[elem]
         elem_data_row = [None]*len(variables)
         for var_idx, variable in enumerate(variables):
             if variable in elem_data_dict:
                 elem_data_row[var_idx] = elem_data_dict[variable]
         data.append(elem_data_row)
-        # if elem_idx % 10000 == 0:
-        #     print(elem_idx)
     print("Finished creating items for df")
 
     covariate_df = pd.DataFrame(data, columns=variables)
+
+    return covariate_df
+
+def clean_covariate_df(covariate_df):
 
     # 3.3: Save the dataframe of scraped records with attached covariates
 
@@ -587,7 +595,8 @@ def get_matches(org_name_df, key_names_list):
                       'comment_org_name',
                       'comment_submitter_name',
                       'docket_id',
-                      'comment_url',]
+                      'comment_url',
+                      'unique_id',]
     important_cols = [x for x in covariate_df.columns if (x.split(':')[-1] in common_tails) or (x in important_cols)]
     covariate_df= covariate_df[important_cols]
 
@@ -596,57 +605,55 @@ def get_matches(org_name_df, key_names_list):
     cols = [x for x in cols if not ':' in x] + [x for x in cols if ':' in x]
     covariate_df= covariate_df[cols]
 
-    # write df
-    with open(BASE_DIR + "data/finreg_commenter_covariates_df_" + curr_date + ".pkl", 'wb') as pkl_out:
-        pickle.dump(covariate_df, pkl_out)
-
-    covariate_df.to_csv(BASE_DIR + "data/finreg_commenter_covariates_df_" + curr_date + ".csv")
+    # covariate_df.to_csv(BASE_DIR + "data/finreg_commenter_covariates_df_" + curr_date + ".csv")
 
     df = covariate_df
     df = df[list(filter(lambda x: not "submitter" in x,df.columns))]
     # df = df[df['comment_org_name']!='']
-    df.to_csv(BASE_DIR + "data/match_data/match_all_covariates_df_" + curr_date + ".csv")
+    # df.to_csv(BASE_DIR + "data/match_data/match_all_covariates_df_" + curr_date + ".csv")
 
-    df = pd.read_csv(BASE_DIR + "data/match_data/match_all_covariates_df_" + curr_date + ".csv")
-    df = df.drop("Unnamed: 0", axis=1)
+    # df = pd.read_csv(BASE_DIR + "data/match_data/match_all_covariates_df_" + curr_date + ".csv")
+    # df = df.drop("Unnamed: 0", axis=1)
 
-    threshold = 0.95
+    # threshold = 0.95
 
-    score_cols = list(filter(lambda x: "score" in x,df.columns))
-    for score_col in score_cols:
-        threshold_fail = df[score_col]<threshold
-        all_cols = list(filter(lambda x: score_col.split(':')[0] in x,df.columns))
-        df.loc[threshold_fail, all_cols] = np.NaN
+    # score_cols = list(filter(lambda x: "score" in x,df.columns))
+    # for score_col in score_cols:
+    #     threshold_fail = df[score_col]<threshold
+    #     all_cols = list(filter(lambda x: score_col.split(':')[0] in x,df.columns))
+    #     df.loc[threshold_fail, all_cols] = np.NaN
 
 
-    name_cols = list(filter(lambda x: "best_match_name" in x,df.columns))
-    exact_matches = pd.DataFrame()
-    for name_col in name_cols:
-        exact_matches[name_col] = df[name_col]==df['comment_org_name']
+    # name_cols = list(filter(lambda x: "best_match_name" in x,df.columns))
+    # exact_matches = pd.DataFrame()
+    # for name_col in name_cols:
+    #     exact_matches[name_col] = df[name_col]==df['comment_org_name']
 
-    new_col = (exact_matches.sum(axis=1)>0).astype(int)
-    df.insert(loc = 5,
-          column = 'exact_match_present',
-          value = new_col)
+    # new_col = (exact_matches.sum(axis=1)>0).astype(int)
+    # df.insert(loc = 5,
+    #       column = 'exact_match_present',
+    #       value = new_col)
     
-    cols = list(df.columns)
-    front = [
-        'comment_agency',
-        'original_org_name',
-        'comment_url',
-        'docket_id',
-        'comment_org_name',
-        'num_org_matches',
-        'exact_match_present',
-        ]
-    cols[:len(front)]= front
+    # cols = list(df.columns)
+    # front = [
+    #     'comment_agency',
+    #     'original_org_name',
+    #     'comment_url',
+    #     'docket_id',
+    #     'comment_org_name',
+    #     'num_org_matches',
+    #     'exact_match_present',
+    #     ]
+    # cols[:len(front)]= front
     
-    df = df[cols]
+    # df = df[cols]
 
-    df.to_csv(BASE_DIR + "data/match_data/match_df_" + curr_date + ".csv")
+    # df.to_csv(BASE_DIR + "data/match_data/match_df_" + curr_date + ".csv")
+    return df
 
 
        
 org_name_df = get_organization_dataset()
-key_names_df = get_comment_dataset()
-get_matches(org_name_df,key_names_df)
+key_names_df = get_comment_dataset().iloc[:1000,:]
+covariate_df = get_matches(org_name_df,key_names_df)
+df = clean_covariate_df(covariate_df)

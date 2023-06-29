@@ -96,10 +96,9 @@ DB_PATH = BASE_DIR[:-7] + "Data/master.sqlite"
 # LAST_SAVE_DATASET_DATE = "20210824"
 LAST_SAVE_DATASET_DATE = "20220402" # Needs to be set to the last date the 'rebuild datasets' part of this code was run
 
-# Function to calculate longest common substring, from https://www.geeksforgeeks.org/print-longest-common-substring/
-# function to find and print 
-# the longest common substring of
-# X[0..m-1] and Y[0..n-1]
+sources = ["FDIC_Institutions", "FFIECInstitutions", "CreditUnions", "CIK", "compustat_resources", "nonprofits_resources", "opensecrets_resources_jwVersion", "SEC_Institutions"]
+
+
 def get_longest_common_substring(string1, string2):
     match = SequenceMatcher(None, string1, string2, autojunk=False).find_longest_match()
     return string1[match.a:match.a + match.size]
@@ -200,15 +199,13 @@ def get_match_candidate_score(frequency_dict, org_name, candidate_match_name):
 
 
 
-def get_financial_dataset():
+def get_organization_dataset():
 
     ## PART 1: Match records from the gathered organization datasets (FDIC, FFEIC, Nonprofits, CIK, Compustat, etc.) to scraped comments
 
     # 1.1: Read and clean org names from gathered org datasets
-    sources = ["FDIC_Institutions", "FFIECInstitutions", "CreditUnions", "CIK", "compustat_resources", "nonprofits_resources", "opensecrets_resources_jwVersion", "SEC_Institutions"]
     # sources = ["FFIECInstitutions", "CIK"]
 
-    org_name_dict = {}
     if True:
         financial_datasets = []
         unique_ids = []
@@ -433,45 +430,6 @@ def get_matches(org_name_df, key_names_list):
                 collected_sources.add(match_candidate_source)
 
         good_matches[elem] = good_org_matches
-            
-    print("Num records in match_dict: " + str(len(match_dict)))
-    print("Num records without a match: " + str(counter))
-    print("Share of records that weren't matchable: " + str(counter / len(match_dict)))
-
-
-    ## PART 2: Attempt to estimate whether comment was submitted by a person or an organization
-    nlp = en_core_web_lg.load()
-
-    # 2.1: Among the matchable scraped comment records, use spacy's ner tagger to tag the tokens in the submitter name and org name of each record. 
-    good_matches_org_tagged = {}
-    num_likely_orgs = 0
-    for elem_idx, elem in tqdm(list(key_names_list.iterrows())):
-        # Consider an org name to likely be a person if the submitter's name isn't empty and if at least one of its tokens gets tagged as corresponding to a person
-        tagged_org_name = []
-        likely_org_check = 1
-        if elem['organization'] is not None:
-            tagged_org_name = nlp(elem['organization'])
-            if "PERSON" in [tag.label_ for tag in tagged_org_name.ents]:
-                likely_org_check = 0
-
-        # Default to considering a record to have been submitted by an org
-        likely_org = 1
-        # BUT, consider the record to have been submitted by a person if the name fields aren't empty and at least one token of each name field was tagged as a person
-        if elem['submitter_name'] is not None and elem['organization'] is not None and elem['submitter_name'] != "" and elem['organization'] != "" and likely_org_check == 0:
-            likely_org = 0
-        # Also consider the record to have been submitted by a person if only one of the name fields was empty and the other had at least one token of each name field was tagged as a person
-        if (elem['submitter_name'] is None or elem['submitter_name'] == "") and (elem['organization'] is not None and elem['organization'] != "") and likely_org_check == 0:
-            likely_org = 0
-        # (Same as above case but switching which name was empty)
-        if (elem['organization'] is None or elem['organization'] == "") and (elem['submitter_name'] is not None and elem['submitter_name'] != ""):
-            likely_org = 0        
-        # Also consider the record to have been submitted by a person if the submitter name field has "anonymous anonymous" in it and the org name field is empty
-        if "anonymous anonymous" in elem['submitter_name'] and (elem['organization'] is None or elem['organization'] == ""):
-            likely_org = 0
-            
-        num_likely_orgs += likely_org
-        
-        good_matches_org_tagged[tuple(elem.values)] = (good_matches[elem['organization']], (likely_org, [X.label_ for X in tagged_org_name.ents]))
         
         
 
@@ -525,10 +483,7 @@ def get_matches(org_name_df, key_names_list):
         comment_title = elem[5]
         original_org_name = elem[6]
 
-        matches = good_matches_org_tagged[elem][0]
-        tag_data = good_matches_org_tagged[elem][1]
-        is_likely_org = tag_data[0]
-        org_tags = tag_data
+        matches = good_matches[elem['organization']]
 
         
         org_match_covariate_dict = {}
@@ -569,8 +524,6 @@ def get_matches(org_name_df, key_names_list):
         covariate_dict[elem]['comment_org_name'] = org_name
         covariate_dict[elem]['comment_agency'] = agency_acronym
         covariate_dict[elem]['docket_id'] = docket_id
-        covariate_dict[elem]['is_likely_org'] = is_likely_org
-        covariate_dict[elem]['org_tags'] = str(org_tags)
         covariate_dict[elem]['org_match_type'] = org_match_type
         covariate_dict[elem]['org_best_match_score'] = org_best_match_score  
 
@@ -694,3 +647,6 @@ def get_matches(org_name_df, key_names_list):
 
 
        
+org_name_df = get_organization_dataset()
+key_names_df = get_comment_dataset()
+get_matches(org_name_df,key_names_df)

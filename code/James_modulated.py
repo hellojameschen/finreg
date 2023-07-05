@@ -50,7 +50,7 @@ from matplotlib import cm
 
 from datetime import datetime
 today_for_filenames = datetime.now()
-curr_date = str(today_for_filenames.strftime("%d/%m/%Y %H:%M:%S"))
+curr_date = str(today_for_filenames.strftime("%Y%m%d%H%M%S"))
 
 NUMBER_OF_MATCHES_TO_RECORD = 10
 punc_remove_re = re.compile(r'\W+')
@@ -200,9 +200,9 @@ def get_match_score(frequency_dict, org_name, candidate_name):
 
     # handle acronyms
     candidate_acronym = ''.join([item[0] for item in candidate_name.split()])
-    for word in org_name:
+    for word in org_name.split():
         if word in candidate_acronym:
-            match_score += 0.5 * len(word)/len(candidate_acronym)
+            match_score += 0.1 * (len(word)-1)/len(candidate_acronym)
 
     return match_score
 
@@ -346,8 +346,8 @@ def get_comment_dataset():
     df.loc[df['agency_acronym']=='FDIC', "organization"] = df.loc[df['agency_acronym']=='FDIC', "organization"].str.split(' - ').map(lambda x: x[0] if x else '')
 
     # SEC is difficult
-    df['submitter_name'] = df['submitter_name'].map(clean_fin_org_names)
-    df['organization'] = df['organization'].map(clean_fin_org_names)
+    df['submitter_name'] = df['submitter_name']
+    df['organization'] = df['organization']
 
     #replace none
     df.loc[df['submitter_name'].isna(), "submitter_name"] = ''
@@ -357,6 +357,7 @@ def get_comment_dataset():
     return df
 
 def get_candidate_match_dict(org_name_df):
+    print('Preparing candidate match dictionary.')
     # 1.4: Create a dict mapping from tokens in the gathered org datasets to IDs and org_names that contain that token
     candidate_match_dict = {}
     for row_idx in tqdm(range(len(org_name_df))):
@@ -381,6 +382,7 @@ def get_candidate_match_dict(org_name_df):
     return candidate_match_dict
         
 def get_candidate_frequency_dict(org_name_df):
+    print('Preparing candidate frequency dictionary.')
     candidate_frequency_dict = {}
     for org_name in tqdm(org_name_df['org_name']):
         for token in org_name.split(" "):
@@ -421,6 +423,17 @@ def get_match_candidates(candidate_match_dict, candidate_frequency_dict, org_nam
     return candidate_matches
 
 
+def filter_top_matches(match_dict, elem):
+    matches = match_dict[elem]
+    if len(matches)== 0:
+        result = pd.DataFrame()
+    else:
+        matches['source'] = matches['unique_id'].str.split('-').str[0]
+        result = matches.groupby('source').first()
+
+    return result
+
+
 def get_matches(org_name_df, key_names_df):
     key_names_df = key_names_df[['organization']].copy()
     org_name_df = org_name_df.copy()
@@ -438,9 +451,8 @@ def get_matches(org_name_df, key_names_df):
     org_name_df['org_name'] = org_name_df['org_name'].apply(clean_fin_org_names)
 
     # 1.4: Create a dict mapping from tokens in the gathered org datasets to IDs and org_names that contain that token
-    print('Preparing candidate frequency dictionary.')
     candidate_frequency_dict = get_candidate_frequency_dict(org_name_df)
-    print('Preparing candidate match dictionary.')
+
     candidate_match_dict = get_candidate_match_dict(org_name_df)
         
 
@@ -448,9 +460,8 @@ def get_matches(org_name_df, key_names_df):
     print('Calculating match scores.')
     # 1.5.1: For each org and submitter name in the scraped comment dataset, get all of the names ('candidate matches') from among the gathered org datasets that have the most important word of the scraped db names in the org's name. Calculate a tf-idf weighted jaccard index match score to choose the best matches among the candidates.
     match_dict = {}#get_match_dict(candidate_match_dict, candidate_frequency_dict, key_names_df)
-    for key_name_idx in tqdm(range(len(key_names_df))):
-        key_name = key_names_df.iloc[key_name_idx]
-        org_name = key_name['organization']
+    unique_cleaned_names = key_names_df['organization'].unique()
+    for org_name in tqdm(unique_cleaned_names):
 
         if not org_name:
             match_dict[org_name] = pd.DataFrame()
@@ -464,57 +475,44 @@ def get_matches(org_name_df, key_names_df):
 
     # 1.5.2: Save the candidate matches and get record counts
 
-    print("Num scraped records: " + str(len(key_names_df)))
+    # print("Num scraped records: " + str(len(key_names_df)))
 
 
     # 1.6: Extract the scraped records with at least one candidate match and take the top top_matches_num (or all if there are < top_matches_num) matches from the scored candidate matches
-    # DONE: loop until we get top match from each dataset
-    counter = 0
+    # TODO: speed up by using dataframe top
+        
+
+    print('Filtering top matches')
     good_matches = {}
     for elem in tqdm(list(match_dict.keys())):
-
-        # Org name
-        good_org_matches = []
-        collected_sources = set()
-        matches = match_dict[elem]
-
-        if len(matches) == 0:
-            counter += 1   
+        good_matches[elem] = filter_top_matches(match_dict, elem)
 
 
-        if len(collected_sources) == len(sources):
-            break
 
-        for match_candidate_idx in range(len(matches)):
-            match_candidate = matches.iloc[match_candidate_idx]
-            if len(collected_sources) == len(sources):
-                break
-            match_candidate_source = match_candidate['unique_id'].split('-')[0]
-            if not match_candidate_source in collected_sources:
-                good_org_matches.append(match_candidate)
-                collected_sources.add(match_candidate_source)
-
-        good_matches[elem] = good_org_matches
-        
     ## PART 3: Create a data from to explore commenter covariates
     # covariate_dfs = get_covariate_dfs()
     # 3.2: Make a dataframe organizing the covariates of the gathered datasets
-    df = pd.DataFrame()
-    for idx in tqdm(range(len(key_names_df))):
-        elem = key_names_df.iloc[idx]
-        org_name = elem['organization']
-        original_match_name = elem['original_organization_name']
+    print('Creating Final Matching Dict')
+    lst = []
+    for original_match_name in tqdm(key_names_df['original_organization_name'].unique()):
+        org_name = clean_fin_org_names(original_match_name)
 
-        df.loc[original_match_name, "comment_org_name"] = elem['organization']
-
+        row = {}
+        row["comment_org_name"] = org_name
+        row["original_organization_name"] = original_match_name
         matches = good_matches[org_name]
-
-        for match in matches:
+        
+        for match_idx in range(len(matches)):
+            match = matches.iloc[match_idx]
             dataset = match['unique_id'].split('-')[0]
 
-            df.loc[original_match_name, f"{dataset}:"+match.index]= match.values
+            row.update(dict(zip(dataset+":"+match.index.astype(str), match.values)))
 
+        lst.append(row)
 
+    print('Creating Final Matching DataFrame')
+    df = pd.DataFrame(lst).set_index('original_organization_name')
+    print('Done')
 
     return df
 
@@ -546,8 +544,8 @@ def get_comp(df1, df2):
 
        
 org_name_df = get_organization_dataset()
-# key_names_df = get_comment_dataset().iloc[:,:]
-key_names_df = pd.read_csv('/Users/jameschen/Documents/Code/finreg/data/comment_metadata_orgs.csv').iloc[:,:]
+key_names_df = get_comment_dataset().iloc[:1000,:]
+# key_names_df = pd.read_csv('/Users/jameschen/Documents/Code/finreg/data/comment_metadata_orgs.csv').iloc[:1000,:]
 matches_df = get_matches(org_name_df, key_names_df)
 df = get_validation(matches_df,key_names_df)
 df.to_csv(BASE_DIR + "data/match_data/validation_df_" + curr_date + ".csv")

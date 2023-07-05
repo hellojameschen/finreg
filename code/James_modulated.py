@@ -359,7 +359,6 @@ def get_comment_dataset():
 def get_candidate_match_dict(org_name_df):
     # 1.4: Create a dict mapping from tokens in the gathered org datasets to IDs and org_names that contain that token
     candidate_match_dict = {}
-    print('Preparing candidate match dictionary.')
     for row_idx in tqdm(range(len(org_name_df))):
         row = org_name_df.iloc[row_idx]
         unique_id = row['unique_id']
@@ -382,7 +381,6 @@ def get_candidate_match_dict(org_name_df):
     return candidate_match_dict
         
 def get_candidate_frequency_dict(org_name_df):
-    print('Preparing candidate frequency dictionary.')
     candidate_frequency_dict = {}
     for org_name in tqdm(org_name_df['org_name']):
         for token in org_name.split(" "):
@@ -440,13 +438,14 @@ def get_matches(org_name_df, key_names_df):
     org_name_df['org_name'] = org_name_df['org_name'].apply(clean_fin_org_names)
 
     # 1.4: Create a dict mapping from tokens in the gathered org datasets to IDs and org_names that contain that token
-
+    print('Preparing candidate frequency dictionary.')
     candidate_frequency_dict = get_candidate_frequency_dict(org_name_df)
-
+    print('Preparing candidate match dictionary.')
     candidate_match_dict = get_candidate_match_dict(org_name_df)
         
 
     # Apply linking dataset
+    print('Calculating match scores.')
     # 1.5.1: For each org and submitter name in the scraped comment dataset, get all of the names ('candidate matches') from among the gathered org datasets that have the most important word of the scraped db names in the org's name. Calculate a tf-idf weighted jaccard index match score to choose the best matches among the candidates.
     match_dict = {}#get_match_dict(candidate_match_dict, candidate_frequency_dict, key_names_df)
     for key_name_idx in tqdm(range(len(key_names_df))):
@@ -529,21 +528,26 @@ def get_best(df):
 
     return df[['best_match_score', 'comment_org_name', 'cleaned_best_match_name', 'original_best_match_name', 'dataset']]
 
-def get_validation(org_name_df,key_names_df):
-    # temp = get_best(df).groupby('original_match_name')
-    # df = temp.first()
-    # df['frequency']=temp.count()['best_match_score']
-    # df = df.reset_index()
-    df = get_matches(org_name_df,key_names_df)
-    df = get_best(df)
+def get_validation(matches_df,key_names_df):
+    df = get_best(matches_df)
     df['frequency'] = key_names_df['organization'].value_counts()
     df = df.sort_values(by=['frequency','best_match_score'], ascending=False)
     df = df[['frequency', 'best_match_score', 'comment_org_name', 'cleaned_best_match_name', 'original_best_match_name', 'dataset']]
     df['hand_match']=''
     return df
+
+def get_comp(df1, df2):
+    df1 = get_best(df1).groupby('comment_org_name').first()
+    df2 = get_best(df2).groupby('comment_org_name').first()
+    merged = df1.merge(df2, on ='comment_org_name', suffixes=('_old', '_new'))
+    merged = merged[merged['cleaned_best_match_name_old'] != merged['cleaned_best_match_name_new']]
+    merged = merged[merged['cleaned_best_match_name_old'] == merged['cleaned_best_match_name_old']]
+    return merged
+
        
 org_name_df = get_organization_dataset()
 # key_names_df = get_comment_dataset().iloc[:,:]
 key_names_df = pd.read_csv('/Users/jameschen/Documents/Code/finreg/data/comment_metadata_orgs.csv').iloc[:,:]
-df = get_validation(org_name_df,key_names_df)
+matches_df = get_matches(org_name_df, key_names_df)
+df = get_validation(matches_df,key_names_df)
 df.to_csv(BASE_DIR + "data/match_data/validation_df_" + curr_date + ".csv")

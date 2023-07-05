@@ -48,9 +48,9 @@ from scipy import stats
 from joypy import joyplot
 from matplotlib import cm
 
-from datetime import date
-today_for_filenames = date.today()
-curr_date = str(today_for_filenames.strftime("%Y%m%d"))
+from datetime import datetime
+today_for_filenames = datetime.now()
+curr_date = str(today_for_filenames.strftime("%d/%m/%Y %H:%M:%S"))
 
 NUMBER_OF_MATCHES_TO_RECORD = 10
 punc_remove_re = re.compile(r'\W+')

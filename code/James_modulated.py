@@ -176,11 +176,11 @@ def clean_match_score(x):
     else:
         return float(x)
 
-def get_match_candidate_score(frequency_dict, org_name, match_name):
+def get_match_score(frequency_dict, org_name, candidate_name):
     org_tokens = org_name.split(' ')
     
     # tokenize the candidate match
-    candidate_match_tokens = set(match_name.split(" "))
+    candidate_match_tokens = set(candidate_name.split(" "))
 
     # Calculate the match score
     total_inverse_frequency = 0
@@ -194,9 +194,15 @@ def get_match_candidate_score(frequency_dict, org_name, match_name):
     match_score = total_matching_inverse_frequency / total_inverse_frequency
 
     # added by James
-    weight = 1/len(org_name)
-    longest_common_substring = get_longest_common_substring(org_name, match_name)
-    match_score -= weight * len(match_name)/len(longest_common_substring) - weight
+    weight = 0.1/len(org_name)
+    longest_common_substring = get_longest_common_substring(org_name, candidate_name)
+    match_score -= weight * len(candidate_name)/len(longest_common_substring) - weight
+
+    # handle acronyms
+    candidate_acronym = ''.join([item[0] for item in candidate_name.split()])
+    for word in org_name:
+        if word in candidate_acronym:
+            match_score += 0.5 * len(word)/len(candidate_acronym)
 
     return match_score
 
@@ -359,11 +365,19 @@ def get_candidate_match_dict(org_name_df):
         unique_id = row['unique_id']
         org_name = row['org_name']
         original_match_name = row['original_match_name']
-        for token in org_name.split(" "):
+
+        flags = org_name.split(" ")
+
+        # include organization acronym
+        org_acronym = ''.join([item[0] for item in org_name.split()])
+        flags.append(org_acronym)
+
+        for token in flags:
             if token in candidate_match_dict:
                 candidate_match_dict[token].append((unique_id, org_name, original_match_name))
             else:
                 candidate_match_dict[token] = [(unique_id, org_name, original_match_name)]
+        
 
     return candidate_match_dict
         
@@ -398,7 +412,7 @@ def get_match_candidates(candidate_match_dict, candidate_frequency_dict, org_nam
                 unique_id = row[0]
                 match_name = row[1]
                 original_match_name = row[2]
-                match_score = get_match_candidate_score(candidate_frequency_dict, org_name, match_name)
+                match_score = get_match_score(candidate_frequency_dict, org_name, match_name)
                 candidate_matches.append((match_score, match_name, original_match_name, unique_id))
 
     # Sort the candidate matches, first by the match score and then by the absolute value of the difference in the number of tokens between the submitter (or org) name and the candidate match org name
@@ -407,52 +421,6 @@ def get_match_candidates(candidate_match_dict, candidate_frequency_dict, org_nam
 
 
     return candidate_matches
-
-# def get_match_dict(candidate_match_dict, candidate_frequency_dict, key_names_df):
-
-#     print('Generating match dictionary.')
-#     match_dict = {}
-#     print("Num scraped records: " + str(len(key_names_df)))
-#     for key_name_idx in tqdm(range(len(key_names_df))):
-#         key_name = key_names_df.iloc[key_name_idx]
-#         org_name = key_name['organization']
-
-#         if not org_name:
-#             match_dict[org_name] = pd.DataFrame()
-#             continue
-
-#         if org_name in match_dict:
-#             continue
-
-#         # Tokenize the submitter name and org name
-#         org_tokens = org_name.split(" ")
-        
-#         # Get the frequencies (in the scraped comment db) of the tokens in the submitter name and org name
-#         # submitter_token_frequencies = sorted([(submitter_token, submitter_frequency_dict[submitter_token]) for submitter_token in submitter_tokens], key=lambda x: x[1])
-#         org_token_frequencies = [(org_token, candidate_frequency_dict.get(org_token)) for org_token in org_tokens]
-#         org_token_frequencies = list(filter(lambda item: item[1] is not None, org_token_frequencies))
-#         org_token_frequencies = sorted(org_token_frequencies, key=lambda x: x[1])
-        
-
-#         candidate_matches = []
-#         # Iterate through the candidate matches to the most informative token
-#         for most_unique_org_token, _ in org_token_frequencies[:1]: # uses top 2 most unique tokens
-#             if most_unique_org_token in candidate_match_dict:
-#                 for row in candidate_match_dict[most_unique_org_token]:
-#                     unique_id = row[0]
-#                     match_name = row[1]
-#                     original_match_name = row[2]
-#                     match_score = get_match_candidate_score(candidate_frequency_dict, org_name, match_name)
-#                     candidate_matches.append((match_score, match_name, original_match_name, unique_id))
-
-#         # Sort the candidate matches, first by the match score and then by the absolute value of the difference in the number of tokens between the submitter (or org) name and the candidate match org name
-#         candidate_matches.sort(key=lambda x:(-x[0], abs(len(x[1].split(" ")) - len(org_tokens))))
-#         candidate_matches = pd.DataFrame(candidate_matches, columns=['match_score','match_name', 'original_match_name', 'unique_id'])
-
-
-#         # Record the candidate matches corresponding to the current scraped comment record
-#         match_dict[org_name] = candidate_matches
-#     return match_dict
 
 
 def get_matches(org_name_df, key_names_df):
@@ -575,6 +543,7 @@ def get_validation(org_name_df,key_names_df):
     return df
        
 org_name_df = get_organization_dataset()
-key_names_df = get_comment_dataset().iloc[:,:]
-# key_names_df = pd.read_csv('/Users/jameschen/Documents/Code/finreg/data/comment_metadata_orgs.csv').iloc[:1000,:]
+# key_names_df = get_comment_dataset().iloc[:,:]
+key_names_df = pd.read_csv('/Users/jameschen/Documents/Code/finreg/data/comment_metadata_orgs.csv').iloc[:,:]
 df = get_validation(org_name_df,key_names_df)
+df.to_csv(BASE_DIR + "data/match_data/validation_df_" + curr_date + ".csv")

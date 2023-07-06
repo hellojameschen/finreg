@@ -143,7 +143,7 @@ def clean_fin_org_names(name):
         return ""
     else:
         # James strip metadata from name
-        name = name.split(',')[0]
+        name = name.split(',\n(')[0]
         name = re.sub(" [0-9]* [k|m]b pdf","",name)
 
         name = name.translate(corp_simplify_utils.STR_TABLE)
@@ -199,10 +199,10 @@ def get_match_score(frequency_dict, org_name, candidate_name):
     match_score -= weight * len(candidate_name)/len(longest_common_substring) - weight
 
     # handle acronyms
-    candidate_acronym = ''.join([item[0] for item in candidate_name.split()])
-    for word in org_name.split():
-        if word in candidate_acronym:
-            match_score += 0.1 * (len(word)-1)/len(candidate_acronym)
+    # candidate_acronym = ''.join([item[0] for item in candidate_name.split()])
+    # for word in org_name.split():
+    #     if word in candidate_acronym:
+    #         match_score += 0.1 * (len(word)-1)/len(candidate_acronym)
 
     return match_score
 
@@ -338,19 +338,19 @@ def get_comment_dataset():
     df['original_organization_name'] = df['organization']
 
     # FRS, take what is before first comma
-    df.loc[df['agency_acronym']=='FRS', "organization"] = df.loc[df['agency_acronym']=='FRS', "organization"].str.split(',').map(lambda x: x[0]).map(lambda x: '' if '(' in x else x)
+    # df.loc[df['agency_acronym']=='FRS', "organization"] = df.loc[df['agency_acronym']=='FRS', "organization"].str.split(',').map(lambda x: x[0]).map(lambda x: '' if '(' in x else x)
 
-    # FDIC take before first comma, before with, and before -
-    df.loc[df['agency_acronym']=='FDIC', "organization"] = df.loc[df['agency_acronym']=='FDIC', "organization"].str.split(',').map(lambda x: x[0] if x else '')
-    df.loc[df['agency_acronym']=='FDIC', "organization"] = df.loc[df['agency_acronym']=='FDIC', "organization"].str.split(' with ').map(lambda x: x[1] if len(x)>1 else x[0])
-    df.loc[df['agency_acronym']=='FDIC', "organization"] = df.loc[df['agency_acronym']=='FDIC', "organization"].str.split(' - ').map(lambda x: x[0] if x else '')
+    # # FDIC take before first comma, before with, and before -
+    # df.loc[df['agency_acronym']=='FDIC', "organization"] = df.loc[df['agency_acronym']=='FDIC', "organization"].str.split(',').map(lambda x: x[0] if x else '')
+    # df.loc[df['agency_acronym']=='FDIC', "organization"] = df.loc[df['agency_acronym']=='FDIC', "organization"].str.split(' with ').map(lambda x: x[1] if len(x)>1 else x[0])
+    # df.loc[df['agency_acronym']=='FDIC', "organization"] = df.loc[df['agency_acronym']=='FDIC', "organization"].str.split(' - ').map(lambda x: x[0] if x else '')
 
     # SEC is difficult
-    df['submitter_name'] = df['submitter_name']
-    df['organization'] = df['organization']
+    # df['submitter_name'] = df['submitter_name']
+    # df['organization'] = df['organization']
 
     #replace none
-    df.loc[df['submitter_name'].isna(), "submitter_name"] = ''
+    # df.loc[df['submitter_name'].isna(), "submitter_name"] = ''
 
     # key_names_df = df.iloc[:,:] # include how many to match
 
@@ -433,26 +433,31 @@ def filter_top_matches(match_dict, elem):
 
     return result
 
+def clean_key_names_df(key_names_df):
+    key_names_df = key_names_df[['original_organization_name']].copy()
+    key_names_df['original_organization_name'] = key_names_df['original_organization_name'].str.replace('\r\n', '\n').str.strip()
+    key_names_df = key_names_df.dropna()
+    key_names_df['organization'] = key_names_df['original_organization_name']
+    lst = list()
+    for idx in range(len(key_names_df)):
+        row = key_names_df.iloc[idx].to_dict()
+        organization = row['organization']
+        organization = organization.split('(')[0]
+        for org in re.split('; |, |\n',organization):
+            row['organization'] = org.strip()
+            lst.append(row.copy())
+    key_names_df = pd.DataFrame(lst)
+    key_names_df['organization'] = key_names_df['organization'].apply(clean_fin_org_names)
+    return key_names_df
 
 def get_matches(org_name_df, key_names_df):
-    key_names_df = key_names_df[['organization']].copy()
     org_name_df = org_name_df.copy()
-
-    key_names_df['original_organization_name'] = key_names_df['organization']
-    org_name_df['original_match_name'] = org_name_df['org_name']
-
-    key_names_df = key_names_df.dropna()
     org_name_df = org_name_df.dropna()
-
-    # key_names_df = key_names_df.loc[key_names_df['organization']==key_names_df['organization']]
-    # org_name_df = org_name_df.loc[org_name_df['organization']==org_name_df['organization']]
-
-    key_names_df['organization'] = key_names_df['organization'].apply(clean_fin_org_names)
+    org_name_df['original_match_name'] = org_name_df['org_name']
     org_name_df['org_name'] = org_name_df['org_name'].apply(clean_fin_org_names)
 
     # 1.4: Create a dict mapping from tokens in the gathered org datasets to IDs and org_names that contain that token
     candidate_frequency_dict = get_candidate_frequency_dict(org_name_df)
-
     candidate_match_dict = get_candidate_match_dict(org_name_df)
         
 
@@ -494,10 +499,12 @@ def get_matches(org_name_df, key_names_df):
     # 3.2: Make a dataframe organizing the covariates of the gathered datasets
     print('Creating Final Matching Dict')
     lst = []
-    for original_match_name in tqdm(key_names_df['original_organization_name'].unique()):
-        org_name = clean_fin_org_names(original_match_name)
-
+    for idx in tqdm(range(len(key_names_df))):
+        key_name = key_names_df.iloc[idx]
+        original_match_name = key_name['original_organization_name']
+        org_name = key_name['organization']
         row = {}
+
         row["comment_org_name"] = org_name
         row["original_organization_name"] = original_match_name
         matches = good_matches[org_name]
@@ -523,20 +530,23 @@ def get_best(df):
     df['dataset'] = df[score_cols].idxmax(axis=1).str.split(':').str[0]
     df['cleaned_best_match_name'] = df.apply(lambda row: row.loc[row['dataset'] + ':match_name'] if row['dataset']==row['dataset'] else None, axis=1)
     df['original_best_match_name'] = df.apply(lambda row: row.loc[row['dataset'] + ':original_match_name'] if row['dataset']==row['dataset'] else None, axis=1)
-
-    return df[['best_match_score', 'comment_org_name', 'cleaned_best_match_name', 'original_best_match_name', 'dataset']]
+    df = df.groupby(['original_organization_name', 'comment_org_name']).first()
+    return df[['best_match_score', 'cleaned_best_match_name', 'original_best_match_name', 'dataset']]
 
 def get_validation(matches_df,key_names_df):
     df = get_best(matches_df)
-    df['frequency'] = key_names_df['organization'].value_counts()
+    key_names_df['x']=1
+    df = df.reset_index().set_index('original_organization_name')
+    df['frequency'] = key_names_df.groupby(['original_organization_name']).count()['x']
     df = df.sort_values(by=['frequency','best_match_score'], ascending=False)
-    df = df[['frequency', 'best_match_score', 'comment_org_name', 'cleaned_best_match_name', 'original_best_match_name', 'dataset']]
+    df = df[['frequency', 'best_match_score', 'cleaned_best_match_name', 'original_best_match_name', 'dataset']]
     df['hand_match']=''
+    df['notes']=''
     return df
 
 def get_comp(df1, df2):
-    df1 = get_best(df1).groupby('comment_org_name').first()
-    df2 = get_best(df2).groupby('comment_org_name').first()
+    df1 = df1.groupby('comment_org_name').first()[['cleaned_best_match_name']]
+    df2 = df2.groupby('comment_org_name').first()[['cleaned_best_match_name']]
     merged = df1.merge(df2, on ='comment_org_name', suffixes=('_old', '_new'))
     merged = merged[merged['cleaned_best_match_name_old'] != merged['cleaned_best_match_name_new']]
     merged = merged[merged['cleaned_best_match_name_old'] == merged['cleaned_best_match_name_old']]
@@ -544,8 +554,60 @@ def get_comp(df1, df2):
 
        
 org_name_df = get_organization_dataset()
-key_names_df = get_comment_dataset().iloc[:1000,:]
-# key_names_df = pd.read_csv('/Users/jameschen/Documents/Code/finreg/data/comment_metadata_orgs.csv').iloc[:1000,:]
+key_names_df = get_comment_dataset().iloc[:,:]
+# key_names_df = pd.read_csv('/Users/jameschen/Documents/Code/finreg/data/comment_metadata_orgs.csv').rename({'organization': 'original_organization_name'}, axis=1)
+key_names_df = clean_key_names_df(key_names_df)
 matches_df = get_matches(org_name_df, key_names_df)
 df = get_validation(matches_df,key_names_df)
 df.to_csv(BASE_DIR + "data/match_data/validation_df_" + curr_date + ".csv")
+
+# Comparison
+# DATA_DIR = '/Users/jameschen/Team Name Dropbox/James Chen/FINREGRULEMAKE2/finreg/data/match_data/'
+# old_file = "validation_20230627.csv"
+# new_file = "validation_df_20230705170014.csv"
+# df1 = pd.read_csv(DATA_DIR + old_file)
+# df2 = pd.read_csv(DATA_DIR + new_file)
+# comp = get_comp(df1,df2)
+# comp.to_csv(DATA_DIR + "comparison_" + old_file + "_" + new_file + ".csv")
+
+# Scoring
+
+validation = pd.read_csv('/Users/jameschen/Downloads/Validation 20230706 - test.csv',keep_default_na=False)
+
+def get_validation_scores(validation, new_validation):
+    validation = validation.set_index('original_org_name')
+    validated_names = validation[validation['hand_match']==validation['hand_match']].index
+
+    new_validation = new_validation.set_index('original_best_match_name')
+    overlap_names = list(set(validated_names).intersection(set(new_validation.index)))
+
+    prev_validated = validation.loc[overlap_names]
+    new_validated = df.loc[overlap_names]
+
+    prev_score = (prev_validated['cleaned_best_match_name'] == prev_validated['original_best_match_name'].apply(clean_fin_org_names)).mean()
+    new_score = (new_validated['cleaned_best_match_name'] == new_validated['original_best_match_name'].apply(clean_fin_org_names)).mean()
+    return prev_score, new_score
+
+# def update_validation(validation, new_validation):
+#     # first include additional rows
+#     new_rows = 
+#     pass
+
+# clean validation as well by stripping and whitelines
+def update_validation(validation, df):
+    validation.set_index('original_org_name')
+    validation.index = validation.index.str.replace('\r\n', '\n').str.strip()
+    temp = validation.groupby('original_org_name').first()
+
+    for idx in range(len(df)):
+        try:
+            df.iloc[idx, -2] = temp['hand_match'].loc[df.index[idx]]
+            df.iloc[idx, -1] = temp['notes'].loc[df.index[idx]]
+        except:
+            print(df.index[idx])
+            
+    return df
+    df.to_csv('/Users/jameschen/Downloads/test.csv')
+
+
+# new_validation.index = new_validation.index.str.replace('\r\n', '\n').str.strip()

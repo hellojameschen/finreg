@@ -530,18 +530,20 @@ def get_best(df):
     df['dataset'] = df[score_cols].idxmax(axis=1).str.split(':').str[0]
     df['cleaned_best_match_name'] = df.apply(lambda row: row.loc[row['dataset'] + ':match_name'] if row['dataset']==row['dataset'] else None, axis=1)
     df['original_best_match_name'] = df.apply(lambda row: row.loc[row['dataset'] + ':original_match_name'] if row['dataset']==row['dataset'] else None, axis=1)
-    df = df.groupby(['original_organization_name', 'comment_org_name']).first()
-    return df[['best_match_score', 'cleaned_best_match_name', 'original_best_match_name', 'dataset']]
+    df = df.groupby(['comment_org_name','original_organization_name']).first()
+    return df[['best_match_score', 'cleaned_best_match_name', 'original_best_match_name', 'dataset']].reset_index()
 
 def get_validation(matches_df,key_names_df):
     df = get_best(matches_df)
     key_names_df['x']=1
-    df = df.reset_index().set_index('original_organization_name')
-    df['frequency'] = key_names_df.groupby(['original_organization_name']).count()['x']
-    df = df.sort_values(by=['frequency','best_match_score'], ascending=False)
-    df = df[['frequency', 'best_match_score', 'cleaned_best_match_name', 'original_best_match_name', 'dataset']]
+    df = df.set_index('comment_org_name')
+    df['frequency'] = key_names_df.groupby(['organization']).count()['x']
+    df = df[['original_organization_name','frequency', 'best_match_score', 'cleaned_best_match_name', 'original_best_match_name', 'dataset']]
     df['hand_match']=''
     df['notes']=''
+    df['original_organization_name'] = df.groupby('comment_org_name')['original_organization_name'].apply(list)
+    df = df.groupby('comment_org_name').first()
+    df = df.sort_values(by=['frequency','best_match_score'], ascending=False)
     return df
 
 def get_comp(df1, df2):

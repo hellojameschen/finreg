@@ -134,6 +134,13 @@ def corpHash(s):
 
     return s
 
+def remove_junk(string):
+    junk = ['inc', 'na', 'pllc', 'llc']
+    lst = string.split()
+    lst = list(filter(lambda x: not x in junk, lst))
+    return ' '.join(lst)
+    
+
 # function to clean org names
 def clean_fin_org_names(name):
     if name == None:
@@ -148,9 +155,11 @@ def clean_fin_org_names(name):
 
         name = name.translate(corp_simplify_utils.STR_TABLE)
         name = re.sub(stopword_re, '', name.lower())
+
+        name = corpHash(name)
+        name = remove_junk(name)
         
-        
-        return corpHash(name)
+        return name
     
 
 def clean_match_score(x):
@@ -555,13 +564,7 @@ def get_comp(df1, df2):
     return merged
 
        
-org_name_df = get_organization_dataset()
-key_names_df = get_comment_dataset().iloc[:,:]
-# key_names_df = pd.read_csv('/Users/jameschen/Documents/Code/finreg/data/comment_metadata_orgs.csv').rename({'organization': 'original_organization_name'}, axis=1)
-key_names_df = clean_key_names_df(key_names_df)
-matches_df = get_matches(org_name_df, key_names_df)
-df = get_validation(matches_df,key_names_df)
-df.to_csv(BASE_DIR + "data/match_data/validation_df_" + curr_date + ".csv")
+
 
 # Comparison
 # DATA_DIR = '/Users/jameschen/Team Name Dropbox/James Chen/FINREGRULEMAKE2/finreg/data/match_data/'
@@ -574,7 +577,6 @@ df.to_csv(BASE_DIR + "data/match_data/validation_df_" + curr_date + ".csv")
 
 # Scoring
 
-validation = pd.read_csv('/Users/jameschen/Downloads/Validation 20230706 - test.csv',keep_default_na=False)
 
 def get_validation_scores(validation, new_validation):
     validation = validation.set_index('original_org_name')
@@ -597,9 +599,9 @@ def get_validation_scores(validation, new_validation):
 
 # clean validation as well by stripping and whitelines
 def update_validation(validation, df):
-    validation.set_index('original_org_name')
+    validation=validation.set_index('comment_org_name')
     validation.index = validation.index.str.replace('\r\n', '\n').str.strip()
-    temp = validation.groupby('original_org_name').first()
+    temp = validation.groupby('comment_org_name').first()
 
     for idx in range(len(df)):
         try:
@@ -609,7 +611,19 @@ def update_validation(validation, df):
             print(df.index[idx])
             
     return df
-    df.to_csv('/Users/jameschen/Downloads/test.csv')
 
 
+org_name_df = get_organization_dataset()
+key_names_df = get_comment_dataset().iloc[:,:]
+# key_names_df = pd.read_csv('/Users/jameschen/Documents/Code/finreg/data/comment_metadata_orgs.csv').rename({'organization': 'original_organization_name'}, axis=1)
+key_names_df = clean_key_names_df(key_names_df)
+matches_df = get_matches(org_name_df, key_names_df)
+df = get_validation(matches_df,key_names_df)
+
+
+validation = pd.read_csv('/Users/jameschen/Downloads/Validation 20230706 - test.csv',keep_default_na=False)
+
+df = update_validation(validation, df)
+
+df.to_csv(BASE_DIR + "data/match_data/validation_df_" + curr_date + ".csv")
 # new_validation.index = new_validation.index.str.replace('\r\n', '\n').str.strip()

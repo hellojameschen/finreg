@@ -146,6 +146,7 @@ def clean_fin_org_names(name):
     if name == None:
         return ''
     name = name.lower()
+    name = name.strip()
     if name is None or not isinstance(name, str) or name == "NA":
         return ""
     else:
@@ -415,7 +416,7 @@ def get_match_candidates(candidate_match_dict, candidate_frequency_dict, org_nam
 
     candidate_matches = []
     # Iterate through the candidate matches to the most informative token
-    for most_unique_org_token, _ in org_token_frequencies[:1]: # uses top 2 most unique tokens
+    for most_unique_org_token, _ in org_token_frequencies[:]: # uses top 2 most unique tokens
         if most_unique_org_token in candidate_match_dict:
             for row in candidate_match_dict[most_unique_org_token]:
                 unique_id = row[0]
@@ -612,18 +613,31 @@ def update_validation(validation, df):
             
     return df
 
+# org_name_df = get_organization_dataset()
+# key_names_df = get_comment_dataset().iloc[:,:]
+# # key_names_df = pd.read_csv('/Users/jameschen/Documents/Code/finreg/data/comment_metadata_orgs.csv').rename({'organization': 'original_organization_name'}, axis=1)
+# key_names_df = clean_key_names_df(key_names_df)
+# matches_df = get_matches(org_name_df, key_names_df)
+# df = get_validation(matches_df,key_names_df)
 
-org_name_df = get_organization_dataset()
-key_names_df = get_comment_dataset().iloc[:,:]
-# key_names_df = pd.read_csv('/Users/jameschen/Documents/Code/finreg/data/comment_metadata_orgs.csv').rename({'organization': 'original_organization_name'}, axis=1)
-key_names_df = clean_key_names_df(key_names_df)
+
+# validation = pd.read_csv('/Users/jameschen/Downloads/Validation 20230706 - test.csv',keep_default_na=False)
+
+# df = update_validation(validation, df)
+
+# df.to_csv(BASE_DIR + "data/match_data/validation_df_" + curr_date + ".csv")
+# # new_validation.index = new_validation.index.str.replace('\r\n', '\n').str.strip()
+
+
+# apply to new dataset
+BASE = '/Users/jameschen/Dropbox (HPP)/Petitions Project/BHC/'
+rssd_linked_data_path = BASE + 'RSSD Linked Data/'
+raw_data_path = BASE + 'Raw Data/'
+
+org_name_df = pd.read_csv(raw_data_path + 'FFIEC banks.csv')
+org_name_df = org_name_df.rename({"NM_LGL": "org_name", "#ID_RSSD": "unique_id"},axis=1)
+key_names_df = pd.read_csv('/Users/jameschen/Documents/Code/BHC/Raw Data/Linkedin_law_experiences_filtered_keywords.csv',index_col=0,nrows=1000)
+key_names_df['organization'] = key_names_df['organization'].astype(str).apply(clean_fin_org_names)
+
+
 matches_df = get_matches(org_name_df, key_names_df)
-df = get_validation(matches_df,key_names_df)
-
-
-validation = pd.read_csv('/Users/jameschen/Downloads/Validation 20230706 - test.csv',keep_default_na=False)
-
-df = update_validation(validation, df)
-
-df.to_csv(BASE_DIR + "data/match_data/validation_df_" + curr_date + ".csv")
-# new_validation.index = new_validation.index.str.replace('\r\n', '\n').str.strip()

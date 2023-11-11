@@ -135,7 +135,7 @@ def corpHash(s):
     return s
 
 def remove_junk(string):
-    junk = ['inc', 'na', 'pllc', 'llc']
+    junk = ['inc', 'na', 'pllc', 'llc', 'lp', 'co', 'company', 'corporation']
     lst = string.split()
     lst = list(filter(lambda x: not x in junk, lst))
     return ' '.join(lst)
@@ -147,16 +147,14 @@ def clean_fin_org_names(name):
         return ''
     name = name.lower()
     name = name.strip()
-    if name is None or not isinstance(name, str) or name == "NA":
-        return ""
-    else:
-        name = name.translate(corp_simplify_utils.STR_TABLE)
-        name = re.sub(stopword_re, '', name.lower())
+    name = re.sub(r'[^\w\s]','',name) 
+    name = remove_junk(name)
 
-        name = corpHash(name)
-        name = remove_junk(name)
-        
-        return name
+    # name = name.translate(corp_simplify_utils.STR_TABLE)
+    # name = re.sub(stopword_re, '', name.lower())
+    # name = corpHash(name)
+    
+    return name
     
 
 def clean_match_score(x):
@@ -404,7 +402,6 @@ def get_match_candidates(candidate_match_dict, candidate_frequency_dict, org_nam
     org_tokens = org_name.split(" ")
     
     # Get the frequencies (in the scraped comment db) of the tokens in the submitter name and org name
-    # submitter_token_frequencies = sorted([(submitter_token, submitter_frequency_dict[submitter_token]) for submitter_token in submitter_tokens], key=lambda x: x[1])
     org_token_frequencies = [(org_token, candidate_frequency_dict.get(org_token)) for org_token in org_tokens]
     org_token_frequencies = list(filter(lambda item: item[1] is not None, org_token_frequencies))
     org_token_frequencies = sorted(org_token_frequencies, key=lambda x: x[1])
@@ -412,7 +409,7 @@ def get_match_candidates(candidate_match_dict, candidate_frequency_dict, org_nam
 
     candidate_matches = []
     # Iterate through the candidate matches to the most informative token
-    for most_unique_org_token, _ in org_token_frequencies[:]: # uses top 2 most unique tokens
+    for most_unique_org_token, _ in org_token_frequencies[:1]: # uses top 2 most unique tokens
         if most_unique_org_token in candidate_match_dict:
             for row in candidate_match_dict[most_unique_org_token]:
                 unique_id = row[0]
@@ -633,8 +630,8 @@ raw_data_path = BASE + 'Raw Data/'
 org_name_df = pd.read_csv(raw_data_path + 'FFIEC banks.csv')
 org_name_df = org_name_df.rename({"NM_LGL": 'organization', "#ID_RSSD": "unique_id"},axis=1)
 org_name_df['unique_id'] = org_name_df['unique_id'].astype(str)
-# key_names_df = pd.read_csv('/Users/jameschen/Documents/Code/BHC/Raw Data/Linkedin_law_experiences_filtered_keywords.csv',index_col=0)
-key_names_df = pd.read_csv('/Users/jameschen/Documents/Code/BHC/Raw Data/Linkedin_law_experiences_filtered_keywords.csv',index_col=0,nrows=1000)
+key_names_df = pd.read_csv('/Users/jameschen/Documents/Code/BHC/Raw Data/Linkedin_law_experiences_filtered_keywords.csv',index_col=0)
+# key_names_df = pd.read_csv('/Users/jameschen/Documents/Code/BHC/Raw Data/Linkedin_law_experiences_filtered_keywords.csv',index_col=0,nrows=1000)
 key_names_df['original_organization_name'] = key_names_df['organization']
 key_names_df['organization'] = key_names_df['organization'].fillna("")
 key_names_df['organization'] = key_names_df['original_organization_name'].astype(str).apply(clean_fin_org_names)

@@ -396,13 +396,13 @@ def get_candidate_frequency_dict(org_name_df):
                 candidate_frequency_dict[token] = 1
     return candidate_frequency_dict
 
-def get_match_candidates(candidate_match_dict, candidate_frequency_dict, org_name):
+def get_match_candidates(candidate_match_dict, candidate_frequency_dict,organization_frequency_dict, org_name):
 
     # Tokenize the submitter name and org name
     org_tokens = org_name.split(" ")
     
     # Get the frequencies (in the scraped comment db) of the tokens in the submitter name and org name
-    org_token_frequencies = [(org_token, candidate_frequency_dict.get(org_token)) for org_token in org_tokens]
+    org_token_frequencies = [(org_token, organization_frequency_dict.get(org_token)) for org_token in org_tokens]
     org_token_frequencies = list(filter(lambda item: item[1] is not None, org_token_frequencies))
     org_token_frequencies = sorted(org_token_frequencies, key=lambda x: x[1])
     
@@ -461,6 +461,7 @@ def get_matches(org_name_df, key_names_df):
 
     # 1.4: Create a dict mapping from tokens in the gathered org datasets to IDs and org_names that contain that token
     candidate_frequency_dict = get_candidate_frequency_dict(key_names_df)
+    organization_frequency_dict = get_candidate_frequency_dict(org_name_df)
     candidate_match_dict = get_candidate_match_dict(org_name_df)
         
 
@@ -478,7 +479,7 @@ def get_matches(org_name_df, key_names_df):
         if org_name in match_dict:
             continue
 
-        match_dict[org_name] = get_match_candidates(candidate_match_dict,candidate_frequency_dict,org_name)
+        match_dict[org_name] = get_match_candidates(candidate_match_dict,candidate_frequency_dict,organization_frequency_dict,org_name)
 
 
     # 1.5.2: Save the candidate matches and get record counts

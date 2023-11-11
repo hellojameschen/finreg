@@ -150,10 +150,6 @@ def clean_fin_org_names(name):
     if name is None or not isinstance(name, str) or name == "NA":
         return ""
     else:
-        # James strip metadata from name
-        name = name.split(',\n(')[0]
-        name = re.sub(" [0-9]* [k|m]b pdf","",name)
-
         name = name.translate(corp_simplify_utils.STR_TABLE)
         name = re.sub(stopword_re, '', name.lower())
 
@@ -197,7 +193,7 @@ def get_match_score(frequency_dict, org_name, candidate_name):
     total_matching_inverse_frequency = 0
     tokenized_name = org_tokens
     for token in tokenized_name:
-        token_frequency = frequency_dict.get(token, 999999) # if token not found, give high frequency to ignore it
+        token_frequency = frequency_dict.get(token, 1) # if token not found, give low frequency to highlight
         total_inverse_frequency += 1.0/token_frequency
         if token in candidate_match_tokens:
             total_matching_inverse_frequency += 1.0/token_frequency
@@ -321,9 +317,9 @@ def get_organization_dataset():
             all_org_names = all_org_names + list(df[col_name])
 
         data = list(zip(unique_ids, all_org_names, financial_datasets))
-        org_name_df = pd.DataFrame(data, columns=['unique_id', 'org_name', 'financial_dataset'])
+        org_name_df = pd.DataFrame(data, columns=['unique_id', 'organization', 'financial_dataset'])
 
-        org_name_df['original_match_name'] = org_name_df['org_name']
+        org_name_df['original_match_name'] = org_name_df['organization']
 
         return org_name_df
 
@@ -373,7 +369,7 @@ def get_candidate_match_dict(org_name_df):
     for row_idx in tqdm(range(len(org_name_df))):
         row = org_name_df.iloc[row_idx]
         unique_id = row['unique_id']
-        org_name = row['org_name']
+        org_name = row['organization']
         original_match_name = row['original_match_name']
 
         flags = org_name.split(" ")
@@ -394,7 +390,7 @@ def get_candidate_match_dict(org_name_df):
 def get_candidate_frequency_dict(org_name_df):
     print('Preparing candidate frequency dictionary.')
     candidate_frequency_dict = {}
-    for org_name in tqdm(org_name_df['org_name']):
+    for org_name in tqdm(org_name_df['organization']):
         for token in org_name.split(" "):
             if token in candidate_frequency_dict:
                 candidate_frequency_dict[token] += 1
@@ -422,7 +418,7 @@ def get_match_candidates(candidate_match_dict, candidate_frequency_dict, org_nam
                 unique_id = row[0]
                 match_name = row[1]
                 original_match_name = row[2]
-                match_score = get_match_score(candidate_frequency_dict, org_name, match_name)
+                match_score = (get_match_score(candidate_frequency_dict, org_name, match_name) + get_match_score(candidate_frequency_dict, match_name, org_name))/2
                 candidate_matches.append((match_score, match_name, original_match_name, unique_id))
 
     # Sort the candidate matches, first by the match score and then by the absolute value of the difference in the number of tokens between the submitter (or org) name and the candidate match org name
@@ -463,11 +459,11 @@ def clean_key_names_df(key_names_df):
 def get_matches(org_name_df, key_names_df):
     org_name_df = org_name_df.copy()
     org_name_df = org_name_df.dropna()
-    org_name_df['original_match_name'] = org_name_df['org_name']
-    org_name_df['org_name'] = org_name_df['org_name'].apply(clean_fin_org_names)
+    org_name_df['original_match_name'] = org_name_df['organization']
+    org_name_df['organization'] = org_name_df['organization'].apply(clean_fin_org_names)
 
     # 1.4: Create a dict mapping from tokens in the gathered org datasets to IDs and org_names that contain that token
-    candidate_frequency_dict = get_candidate_frequency_dict(org_name_df)
+    candidate_frequency_dict = get_candidate_frequency_dict(key_names_df)
     candidate_match_dict = get_candidate_match_dict(org_name_df)
         
 
@@ -635,14 +631,18 @@ rssd_linked_data_path = BASE + 'RSSD Linked Data/'
 raw_data_path = BASE + 'Raw Data/'
 
 org_name_df = pd.read_csv(raw_data_path + 'FFIEC banks.csv')
-org_name_df = org_name_df.rename({"NM_LGL": "org_name", "#ID_RSSD": "unique_id"},axis=1)
+org_name_df = org_name_df.rename({"NM_LGL": 'organization', "#ID_RSSD": "unique_id"},axis=1)
 org_name_df['unique_id'] = org_name_df['unique_id'].astype(str)
-key_names_df = pd.read_csv('/Users/jameschen/Documents/Code/BHC/Raw Data/Linkedin_law_experiences_filtered_keywords.csv',index_col=0)
-# key_names_df = pd.read_csv('/Users/jameschen/Documents/Code/BHC/Raw Data/Linkedin_law_experiences_filtered_keywords.csv',index_col=0,nrows=1000)
+# key_names_df = pd.read_csv('/Users/jameschen/Documents/Code/BHC/Raw Data/Linkedin_law_experiences_filtered_keywords.csv',index_col=0)
+key_names_df = pd.read_csv('/Users/jameschen/Documents/Code/BHC/Raw Data/Linkedin_law_experiences_filtered_keywords.csv',index_col=0,nrows=1000)
 key_names_df['original_organization_name'] = key_names_df['organization']
+key_names_df['organization'] = key_names_df['organization'].fillna("")
 key_names_df['organization'] = key_names_df['original_organization_name'].astype(str).apply(clean_fin_org_names)
-
 
 matches_df = get_matches(org_name_df, key_names_df)
 
-matches_df.to_csv("/Users/jameschen/Documents/Code/finreg/code/matches_df.csv")
+# n = 5
+# splits = np.split(key_names_df, n)
+# for i in range(len(splits)):
+#     matches_df = get_matches(org_name_df, splits[i])
+#     matches_df.to_csv(f"/Users/jameschen/Documents/Code/finreg/code/matches_df_organizations_freq_dict_{i}.csv")

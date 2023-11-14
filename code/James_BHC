@@ -135,7 +135,7 @@ def corpHash(s):
     return s
 
 def remove_junk(string):
-    junk = ['inc', 'na', 'pllc', 'llc', 'lp', 'co', 'company', 'corporation']
+    junk = ['inc', 'na', 'pllc', 'llc', 'lp', 'co', 'company', 'corporation', 'the', 'of', 'group', 'ltd', 'plc', 'limited', 'corp', 'llp', 'and']
     lst = string.split()
     lst = list(filter(lambda x: not x in junk, lst))
     return ' '.join(lst)
@@ -396,7 +396,7 @@ def get_candidate_frequency_dict(org_name_df):
                 candidate_frequency_dict[token] = 1
     return candidate_frequency_dict
 
-def get_match_candidates(candidate_match_dict, candidate_frequency_dict, org_name):
+def get_match_candidates(candidate_match_dict, candidate_frequency_dict, organization_frequency_dict, org_name):
 
     # Tokenize the submitter name and org name
     org_tokens = org_name.split(" ")
@@ -415,7 +415,7 @@ def get_match_candidates(candidate_match_dict, candidate_frequency_dict, org_nam
                 unique_id = row[0]
                 match_name = row[1]
                 original_match_name = row[2]
-                match_score = (get_match_score(candidate_frequency_dict, org_name, match_name) + get_match_score(candidate_frequency_dict, match_name, org_name))/2
+                match_score = (get_match_score(organization_frequency_dict, org_name, match_name) + get_match_score(candidate_frequency_dict, match_name, org_name))/2
                 candidate_matches.append((match_score, match_name, original_match_name, unique_id))
 
     # Sort the candidate matches, first by the match score and then by the absolute value of the difference in the number of tokens between the submitter (or org) name and the candidate match org name
@@ -461,6 +461,7 @@ def get_matches(org_name_df, key_names_df):
 
     # 1.4: Create a dict mapping from tokens in the gathered org datasets to IDs and org_names that contain that token
     candidate_frequency_dict = get_candidate_frequency_dict(key_names_df)
+    organization_frequency_dict = get_candidate_frequency_dict(org_name_df)
     candidate_match_dict = get_candidate_match_dict(org_name_df)
         
 
@@ -478,7 +479,7 @@ def get_matches(org_name_df, key_names_df):
         if org_name in match_dict:
             continue
 
-        match_dict[org_name] = get_match_candidates(candidate_match_dict,candidate_frequency_dict,org_name)
+        match_dict[org_name] = get_match_candidates(candidate_match_dict,candidate_frequency_dict, organization_frequency_dict,org_name)
 
 
     # 1.5.2: Save the candidate matches and get record counts
@@ -638,6 +639,7 @@ key_names_df['organization'] = key_names_df['original_organization_name'].astype
 
 matches_df = get_matches(org_name_df, key_names_df)
 
+matches_df.to_csv(f"/Users/jameschen/Documents/Code/finreg/code/matches_df_v1.csv")
 # n = 5
 # splits = np.split(key_names_df, n)
 # for i in range(len(splits)):

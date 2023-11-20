@@ -1,5 +1,5 @@
 apsw==3.42.0.0
-en_core_web_lg==3.5.0
+
 fastDamerauLevenshtein==1.0.7
 fastDamerauLevenshtein==1.0.7
 joypy==0.2.6

@@ -32,6 +32,7 @@ from difflib import SequenceMatcher
 import spacy
 from spacy import displacy
 from collections import Counter
+# first pip3 install spacy
 # to install: $python3 -m spacy download en_core_web_lg
 import en_core_web_lg
 
@@ -607,20 +608,6 @@ def update_validation(validation, df):
             
     return df
 
-# org_name_df = get_organization_dataset()
-# key_names_df = get_comment_dataset().iloc[:,:]
-# # key_names_df = pd.read_csv('/Users/jameschen/Documents/Code/finreg/data/comment_metadata_orgs.csv').rename({'organization': 'original_organization_name'}, axis=1)
-# key_names_df = clean_key_names_df(key_names_df)
-# matches_df = get_matches(org_name_df, key_names_df)
-# df = get_validation(matches_df,key_names_df)
-
-
-# validation = pd.read_csv('/Users/jameschen/Downloads/Validation 20230706 - test.csv',keep_default_na=False)
-
-# df = update_validation(validation, df)
-
-# df.to_csv(BASE_DIR + "data/match_data/validation_df_" + curr_date + ".csv")
-# # new_validation.index = new_validation.index.str.replace('\r\n', '\n').str.strip()
 
 
 # apply to new dataset
@@ -639,9 +626,4 @@ key_names_df['organization'] = key_names_df['original_organization_name'].astype
 
 matches_df = get_matches(org_name_df, key_names_df)
 
-matches_df.to_csv(f"/Users/jameschen/Documents/Code/finreg/code/matches_df_v1.csv")
-# n = 5
-# splits = np.split(key_names_df, n)
-# for i in range(len(splits)):
-#     matches_df = get_matches(org_name_df, splits[i])
-#     matches_df.to_csv(f"/Users/jameschen/Documents/Code/finreg/code/matches_df_organizations_freq_dict_{i}.csv")
+# matches_df.to_csv(f"/Users/jameschen/Documents/Code/finreg/code/matches_df_v1.csv")
